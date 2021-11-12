@@ -7,7 +7,7 @@ phases:
       java: openjdk8
 
     commands:
-      - sbt --version
+      - sbt sbtVersion
       - sdk install sbt
 
   pre_build:
