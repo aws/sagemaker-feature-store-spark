@@ -7,9 +7,9 @@ object DataFrameRepartitioner {
   val DEFAULT_SHUFFLE_PARTITIONS: String = "200"
 
   def getParallelism(inputDataFrame: DataFrame): Int = {
-    val sparkContext = inputDataFrame.sparkSession.sparkContext
+    val sparkContext          = inputDataFrame.sparkSession.sparkContext
     val configuredParallelism = sparkContext.getConf.get("spark.default.parallelism", null)
-    val systemParallelism = sparkContext.defaultParallelism
+    val systemParallelism     = sparkContext.defaultParallelism
 
     // Worship customer's configuration, else return the parallelism calculated from number of total cores
     if (configuredParallelism != null) {
@@ -20,9 +20,9 @@ object DataFrameRepartitioner {
   }
 
   def repartition(inputDataFrame: DataFrame): DataFrame = {
-    val sparkContext = inputDataFrame.sparkSession.sparkContext
-    val parallelism = getParallelism(inputDataFrame)
-    val maxPartitions = sparkContext.getConf.get("spark.sql.shuffle.partitions", DEFAULT_SHUFFLE_PARTITIONS).toInt
+    val sparkContext    = inputDataFrame.sparkSession.sparkContext
+    val parallelism     = getParallelism(inputDataFrame)
+    val maxPartitions   = sparkContext.getConf.get("spark.sql.shuffle.partitions", DEFAULT_SHUFFLE_PARTITIONS).toInt
     val partitionsCount = inputDataFrame.rdd.getNumPartitions
 
     // Repartitioning is a very costly operation, only do this when:
@@ -30,6 +30,8 @@ object DataFrameRepartitioner {
     // 2. Too many partitions, even greater than number of shuffle partitions
     if (partitionsCount < parallelism || partitionsCount > maxPartitions) {
       inputDataFrame.repartition(parallelism)
+    } else {
+      inputDataFrame
     }
   }
 

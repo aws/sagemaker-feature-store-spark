@@ -4,3 +4,10 @@ pyspark-sdk/.tox/
 scala-spark-sdk/.bsp/
 scala-spark-sdk/.idea/
 scala-spark-sdk/.scalafmt.conf
+.idea/
+pyspark-sdk/deps/
+pyspark-sdk/dist/
+pyspark-sdk/sagemaker_feature_store_pyspark.egg-info/
+scala-spark-sdk/project/target/
+scala-spark-sdk/target
+scala-spark-sdk/project/project/

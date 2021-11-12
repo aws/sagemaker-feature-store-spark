@@ -13,7 +13,7 @@ scmInfo := Some(
 licenses := Seq("Apache License, Version 2.0" -> url("https://aws.amazon.com/apache2.0"))
 
 lazy val SageMakerFeatureStoreSpark = (project in file("."))
-val sparkVersion = System.getProperty("SPARK_VERSION", "3.1.1")
+val sparkVersion = System.getProperty("SPARK_VERSION", "3.1.2")
 version := {
  val base = baseDirectory.in(SageMakerFeatureStoreSpark).value
  val packageVersion = IO.read(base / ".." / "VERSION").trim
@@ -58,5 +58,3 @@ jacocoReportSettings := JacocoReportSettings()
     JacocoThresholds(
       line = 90)
   )
-
-// TODO: Add sonatype configuration

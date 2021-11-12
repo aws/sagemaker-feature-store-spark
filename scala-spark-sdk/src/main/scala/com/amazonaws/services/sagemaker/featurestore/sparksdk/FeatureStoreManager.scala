@@ -18,14 +18,24 @@ package com.amazonaws.services.sagemaker.featurestore.sparksdk
 
 import com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 import com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers.FeatureGroupHelper._
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers.{ClientFactory, DataFrameRepartitioner, FeatureGroupArnResolver, SparkSessionInitializer}
+import com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers.{
+  ClientFactory,
+  DataFrameRepartitioner,
+  FeatureGroupArnResolver,
+  SparkSessionInitializer
+}
 import com.amazonaws.services.sagemaker.featurestore.sparksdk.validators.InputDataSchemaValidator._
 import org.apache.spark.sql.functions.{col, current_timestamp, date_format, lit}
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType}
 
 import collection.JavaConverters._
 import org.apache.spark.sql.{DataFrame, Row}
-import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupRequest, DescribeFeatureGroupResponse, FeatureDefinition, FeatureType}
+import software.amazon.awssdk.services.sagemaker.model.{
+  DescribeFeatureGroupRequest,
+  DescribeFeatureGroupResponse,
+  FeatureDefinition,
+  FeatureType
+}
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.SageMakerFeatureStoreRuntimeClient
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{FeatureValue, PutRecordRequest}
 
@@ -110,7 +120,7 @@ class FeatureStoreManager extends Serializable {
   }
 
   private def streamIngestIntoOnlineStore(featureGroupName: String, inputDataFrame: DataFrame): Unit = {
-    val columns = inputDataFrame.schema.names
+    val columns                = inputDataFrame.schema.names
     val repartitionedDataFrame = DataFrameRepartitioner.repartition(inputDataFrame)
     repartitionedDataFrame.foreachPartition((rows: Iterator[Row]) => {
       putOnlineRecordsForPartition(
@@ -131,13 +141,15 @@ class FeatureStoreManager extends Serializable {
     for (row <- rows) {
       val record = ListBuffer[FeatureValue]()
       for (columnName <- columns) {
-        Try(row.getAs[String](columnName)) match {
+        Try(row.getAs[Any](columnName)) match {
           case Success(s) =>
-            record += FeatureValue
-              .builder()
-              .featureName(columnName)
-              .valueAsString(s)
-              .build()
+            if (s != null) {
+              record += FeatureValue
+                .builder()
+                .featureName(columnName)
+                .valueAsString(s.toString)
+                .build()
+            }
           case Failure(e) => throw new RuntimeException(e)
         }
       }

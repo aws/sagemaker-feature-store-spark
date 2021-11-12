@@ -13,18 +13,6 @@ VERSION_PATH = "VERSION"
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 in_spark_sdk = os.path.isfile("../scala-spark-sdk/build.sbt")
 
-
-def find_spark_home():
-    # Copy jars to default path when installation happens on EMR
-    for path in ['/usr/lib/spark']:
-        if os.path.exists(path):
-            return path
-
-    spark_home = os.environ.get('SPARK_HOME', None)
-
-    return spark_home
-
-
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
@@ -36,7 +24,7 @@ def read_version():
 class CustomInstall(install):
     def run(self):
         install.run(self)
-        spark_home_dir = find_spark_home()
+        spark_home_dir = os.environ.get('SPARK_HOME', None)
         if spark_home_dir:
             print("Copying depdendent jars to SPARK_HOME...")
             for jar in os.listdir(JARS_TARGET):
@@ -88,7 +76,8 @@ else:
 
 setup(
     name="sagemaker_feature_store_pyspark",
-    version=read_version(),
+    # version=read_version(),
+    version="0.0.18",
     description="Amazon SageMaker FeatureStore PySpark Bindings",
     license="Apache License 2.0",
     zip_safe=False,
