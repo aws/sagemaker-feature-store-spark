@@ -17,7 +17,7 @@ phases:
       - echo Packaging pyspark library according to the instructions in setup.py...
       - cd pyspark-sdk
       - python setup.py sdist
-      - echo Packaging finished, start running integration test.
+      - echo Packaging finished, start running integration test
       - cd integration_test
       - ./run-spark-integration-test
   post_build:
