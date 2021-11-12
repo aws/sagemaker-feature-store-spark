@@ -19,30 +19,18 @@ def classpath_jars():
     Returns:
         List of absolute paths.
     """
+    import pkg_resources
     import os
-    import atexit
-    from importlib import resources
-    from contextlib import ExitStack
 
-    # Control the life cycle of temporary files and manage explicitely
-    # instead of cleaning them up at once
-    file_manager = ExitStack()
-    atexit.register(file_manager.close)
     pkg_dir = __name__
 
-    jars_dir = 'jars'
+    jars_dir = "/jars/"
     os.environ['PYTHON_EGG_CACHE'] = pkg_dir + '/tmp'
 
-    package_dir = resources.files(__name__).joinpath(jars_dir)
-    bundled_jars = package_dir.iterdir()
-
-    jars = []
-    for jar in bundled_jars:
-        with jar as p:
-            jars.append(str(p))
-            file_manager.enter_context(p)
+    bundled_jars = pkg_resources.resource_listdir(pkg_dir, jars_dir)
+    jars = [pkg_resources.resource_filename(pkg_dir, jars_dir + jar) for jar in bundled_jars]
 
     return jars
 
 
-__all__ = ['FeatureStoreManager', 'classpath_jars']
+__all__ = ['FeatureStoreManager', 'classpath_jars', 'wrapper']
