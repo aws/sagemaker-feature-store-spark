@@ -11,6 +11,7 @@ phases:
       - echo Start Building Feature Store Spark Library...
       - cd scala-spark-sdk
       - sbt printClasspath
+      - cd ..
   build:
     commands:
       - echo Build started on `date`
