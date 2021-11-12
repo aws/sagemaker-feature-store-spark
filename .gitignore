@@ -3,7 +3,6 @@ pyspark-sdk/.coverage
 pyspark-sdk/.tox/
 scala-spark-sdk/.bsp/
 scala-spark-sdk/.idea/
-scala-spark-sdk/.scalafmt.conf
 .idea/
 pyspark-sdk/deps/
 pyspark-sdk/dist/
