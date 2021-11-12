@@ -8,7 +8,6 @@ phases:
 
     commands:
       - sbt sbtVersion
-      - sdk install sbt
 
   pre_build:
     commands:
