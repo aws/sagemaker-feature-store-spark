@@ -10,3 +10,4 @@ pyspark-sdk/sagemaker_feature_store_pyspark.egg-info/
 scala-spark-sdk/project/target/
 scala-spark-sdk/target
 scala-spark-sdk/project/project/
+scala-spark-sdk/test-output

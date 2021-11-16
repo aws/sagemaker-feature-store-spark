@@ -46,8 +46,6 @@ exportJars := true
 lazy val printClasspath = taskKey[Unit]("Dump classpath")
 printClasspath := (fullClasspath in Runtime value) foreach { e => println(e.data) }
 
-scalafmtOnCompile := true
-
 assemblyMergeStrategy in assembly := {
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
   case x => MergeStrategy.first

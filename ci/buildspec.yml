@@ -8,14 +8,16 @@ phases:
 
   pre_build:
     commands:
-      - echo Start Building Feature Store Spark Library...
-      - cd scala-spark-sdk
-      - sbt printClasspath
-      - cd ..
+      - echo Start building Feature Store Spark Library
   build:
     commands:
       - echo Build started on `date`
-      - echo Packaging pyspark library according to the instructions in setup.py...
+      - echo Verifying scala package build, code format and test coverage
+      - cd scala-spark-sdk
+      - sbt scalafmtCheckAll jacoco
+      - cd ..
+      - echo Scala pacakge build verification finished
+      - echo Packaging pyspark library according to setup.py
       - cd pyspark-sdk
       - python setup.py sdist
       - echo Packaging finished, start running integration test

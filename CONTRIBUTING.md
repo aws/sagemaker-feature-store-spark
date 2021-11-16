@@ -39,6 +39,30 @@ To send us a pull request, please:
 GitHub provides additional document on [forking a repository](https://help.github.com/articles/fork-a-repo/) and
 [creating a pull request](https://help.github.com/articles/creating-a-pull-request/).
 
+### Commit Your Change
+
+We use commit messages to update the project version number and generate changelog entries, so it's important for them to follow the right format. Valid commit messages include a prefix, separated from the rest of the message by a colon and a space. Here are a few examples:
+
+```
+feature: support direct ingestion into feature group offline store
+fix: fix flake8 errors
+documentation: add documentation for online stream intgestion
+```
+
+Valid prefixes are listed in the table below.
+
+| Prefix          | Use for...                                                                                     |
+|----------------:|:-----------------------------------------------------------------------------------------------|
+| `breaking`      | Incompatible API changes.                                                                      |
+| `deprecation`   | Deprecating an existing API or feature, or removing something that was previously deprecated.  |
+| `feature`       | Adding a new feature.                                                                          |
+| `fix`           | Bug fixes.                                                                                     |
+| `change`        | Any other code change.                                                                         |
+| `documentation` | Documentation changes.                                                                         |
+
+Some of the prefixes allow abbreviation ; `break`, `feat`, `depr`, and `doc` are all valid. If you omit a prefix, the commit will be treated as a `change`.
+
+For the rest of the message, use imperative style and keep things concise but informative. See [How to Write a Git Commit Message](https://chris.beams.io/posts/git-commit/) for guidance.
 
 ## Finding contributions to work on
 Looking at the existing issues is a great way to find something to contribute on. As our projects, by default, use the default GitHub issue labels (enhancement/bug/duplicate/help wanted/invalid/question/wontfix), looking at any 'help wanted' issues is a great place to start.
