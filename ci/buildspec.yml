@@ -8,6 +8,7 @@ phases:
 
   pre_build:
     commands:
+      - export SBT_OPTS="-XX:MaxMetaspaceSize=1024M"
       - echo Start building Feature Store Spark Library
   build:
     commands:
