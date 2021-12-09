@@ -1,6 +1,5 @@
 package com.amazonaws.services.sagemaker.featurestore.sparksdk
 
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 import com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers.ClientFactory
 import collection.JavaConverters._
 import org.apache.spark.sql.functions.col
@@ -210,48 +209,6 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
     verify(mockedSageMakerFeatureStoreRuntimeClient, times(0))
       .putRecord(putRecordRequest)
     verifyDataIngestedInOfflineStore(inputDataFrame, resolvedOutputPath)
-  }
-
-  @Test(
-    dataProvider = "ingestDataTestDataProvider",
-    expectedExceptions = Array(classOf[ValidationError])
-  )
-  def ingestDataDirectOfflineStoreTest_offlineStoreNotEnabled(
-      inputDataFrame: DataFrame,
-      putRecordRequest: PutRecordRequest
-  ): Unit = {
-    val response = DescribeFeatureGroupResponse
-      .builder()
-      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
-      .featureGroupStatus(FeatureGroupStatus.CREATED)
-      .eventTimeFeatureName("event-time")
-      .recordIdentifierFeatureName("record-identifier")
-      .featureDefinitions(
-        FeatureDefinition
-          .builder()
-          .featureName("record-identifier")
-          .featureType(FeatureType.STRING)
-          .build(),
-        FeatureDefinition
-          .builder()
-          .featureName("event-time")
-          .featureType(FeatureType.STRING)
-          .build()
-      )
-      .onlineStoreConfig(
-        OnlineStoreConfig.builder().enableOnlineStore(true).build()
-      )
-      .build()
-
-    when(
-      mockedSageMakerClient
-        .describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))
-    ).thenReturn(response)
-    featureStoreManager.ingestData(
-      inputDataFrame,
-      TEST_FEATURE_GROUP_ARN,
-      directOfflineStore = true
-    )
   }
 
   @Test(dataProvider = "loadFeatureDefinitionsFromSchemaTestDataProvider")

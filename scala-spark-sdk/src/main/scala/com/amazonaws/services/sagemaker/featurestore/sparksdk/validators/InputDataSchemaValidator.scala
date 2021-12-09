@@ -40,10 +40,7 @@ object InputDataSchemaValidator {
       .toSet
       .asJava
 
-    var startTimeMillis = System.currentTimeMillis()
     validateSchemaNames(dataFrame.schema.names, featuresInFeatureGroup, recordIdentifierName, eventTimeFeatureName)
-    var durationMillis = System.currentTimeMillis() - startTimeMillis
-    println(s"time elapsed for validating schema names: $durationMillis milliseconds")
 
     // Numeric data types validation - For example, verify that only numeric values that are within bounds
     // of the Integer and Double data types are present in the corresponding fields.
@@ -54,10 +51,10 @@ object InputDataSchemaValidator {
       describeResponse.eventTimeFeatureName()
     )
     val schemaDataTypeValidatorColumn = getSchemaDataTypeValidatorColumn(
-      schemaDataTypeValidatorMap
+      schemaDataTypeValidatorMap,
+      recordIdentifierName,
+      eventTimeFeatureName
     )
-
-    startTimeMillis = System.currentTimeMillis()
 
     val invalidRows = dataFrame
       .withColumn(
@@ -77,9 +74,6 @@ object InputDataSchemaValidator {
           "or records values equal to NaN."
       )
     }
-
-    durationMillis = System.currentTimeMillis() - startTimeMillis
-    println(s"time elapsed for finding invalid rows names: $durationMillis milliseconds")
 
     val dataTypeTransformationMap = getSchemaDataTypeTransformationMap(
       schemaDataTypeValidatorMap,
@@ -127,7 +121,7 @@ object InputDataSchemaValidator {
       }
     }
 
-    // Verify there are no unknow colums
+    // Verify there is no unknown column.
     if (unknown_columns.nonEmpty) {
       throw ValidationError(
         s"Cannot proceed. Schema contains unknown columns: '$unknown_columns'"
@@ -181,16 +175,24 @@ object InputDataSchemaValidator {
   }
 
   private def getSchemaDataTypeValidatorColumn(
-      dataTypeValidatorMap: Map[String, String => Column]
+      dataTypeValidatorMap: Map[String, String => Column],
+      recordIdentifierName: String,
+      eventTimeFeatureName: String
   ): Seq[Column] = {
     var dataTypeValidatorColumnArray = Seq[Column]()
 
     // Mark the row as not valid if:
-    // 1. The data cannot be casted to the type specified in feature definition.
+    // 1. The data cannot be casted to the type specified in feature definition
     // 2. The value of data is NaN
+    // 3. Feature value of event time feature is null
+    // 4. Feature value of record identifier is null
     for ((featureName, conversion) <- dataTypeValidatorMap) {
       dataTypeValidatorColumnArray = dataTypeValidatorColumnArray :+ when(
-        conversion(featureName).isNull && col(featureName).isNotNull || col(featureName).isNaN,
+        conversion(featureName).isNull && col(featureName).isNotNull
+          || col(featureName).isNaN
+          || col(recordIdentifierName).isNull
+          || col(eventTimeFeatureName).isNull
+        ,
         lit(featureName + " not valid")
       ).otherwise(lit(null))
     }

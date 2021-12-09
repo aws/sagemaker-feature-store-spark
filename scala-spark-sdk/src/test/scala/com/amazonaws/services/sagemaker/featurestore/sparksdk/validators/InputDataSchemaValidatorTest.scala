@@ -69,6 +69,14 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
       Array(
         Seq(("identifier-1", NaN))
           .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq((null, "1631091971"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", null))
+          .toDF("record-identifier", "event-time")
       )
     )
   }

@@ -51,6 +51,21 @@ object FeatureGroupHelper {
     }
   }
 
+  /** Check if directOfflineStore is set correctly.
+   *
+   * @param describeResponse response of DescribeFeatureGroup.
+   */
+  def checkDirectOfflineStore(
+      describeResponse: DescribeFeatureGroupResponse,
+      directOfflineStore: Boolean
+  ): Unit = {
+    if (!isFeatureGroupOfflineStoreEnabled(describeResponse) && directOfflineStore) {
+      throw ValidationError(
+        s"OfflineStore of FeatureGroup: '${describeResponse.featureGroupName()}' is not enabled, however directOfflineStore is set to 'true'."
+      )
+    }
+  }
+
   /** Check if FeatureGruop has OnlineStore enabled.
     *
    * @param describeResponse response of DescribeFeatureGroup.

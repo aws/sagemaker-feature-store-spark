@@ -61,6 +61,31 @@ class FeatureGroupHelperTest extends TestNGSuite {
     FeatureGroupHelper.checkIfFeatureGroupArnIdentical(response, "invalid-feature-group-arn")
   }
 
+  @Test
+  def checkDirectOfflineStoreTest_positive(): Unit = {
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupName(TEST_FEATURE_GROUP_NAME)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .onlineStoreConfig(OnlineStoreConfig.builder().build())
+      .offlineStoreConfig(OfflineStoreConfig.builder().build())
+      .build()
+
+    FeatureGroupHelper.checkDirectOfflineStore(response, directOfflineStore = true)
+    FeatureGroupHelper.checkDirectOfflineStore(response, directOfflineStore = false)
+  }
+
+  @Test(expectedExceptions = Array(classOf[ValidationError]))
+  def checkDirectOfflineStoreTest_negative(): Unit = {
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupName(TEST_FEATURE_GROUP_NAME)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .build()
+
+    FeatureGroupHelper.checkDirectOfflineStore(response, directOfflineStore = true)
+  }
+
   @Test(dataProvider = "featureGroupOnlineStoreEnabledTestDataProvider")
   def featureGroupOnlineStoreEnabledTest(
       response: DescribeFeatureGroupResponse,

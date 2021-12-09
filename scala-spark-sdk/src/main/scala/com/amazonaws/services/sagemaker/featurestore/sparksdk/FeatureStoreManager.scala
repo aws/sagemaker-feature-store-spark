@@ -45,7 +45,6 @@ import scala.util.{Failure, Success, Try}
 
 class FeatureStoreManager extends Serializable {
 
-  val PARQUET_BLOCK_SIZE_IN_MB: Int = 128 * 1024 * 1024
   val SPARK_TYPE_TO_FEATURE_TYPE_MAP: Map[DataType, FeatureType] = Map(
     StringType  -> FeatureType.STRING,
     DoubleType  -> FeatureType.FRACTIONAL,
@@ -78,6 +77,8 @@ class FeatureStoreManager extends Serializable {
 
     checkIfFeatureGroupArnIdentical(describeResponse, featureGroupArn)
     checkIfFeatureGroupIsCreated(describeResponse)
+    checkDirectOfflineStore(describeResponse, directOfflineStore)
+
 
     val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
 
@@ -215,7 +216,6 @@ class FeatureStoreManager extends Serializable {
     tempDataFrame.write
       .partitionBy("year", "month", "day", "hour")
       .option("compression", "none")
-      .option("parquet.block.size", PARQUET_BLOCK_SIZE_IN_MB)
       .mode("append")
       .parquet(destinationFilePath)
   }
