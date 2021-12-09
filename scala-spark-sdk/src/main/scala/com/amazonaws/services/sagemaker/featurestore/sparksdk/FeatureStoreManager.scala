@@ -79,7 +79,6 @@ class FeatureStoreManager extends Serializable {
     checkIfFeatureGroupIsCreated(describeResponse)
     checkDirectOfflineStore(describeResponse, directOfflineStore)
 
-
     val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
 
     startTimeMillis = System.currentTimeMillis()

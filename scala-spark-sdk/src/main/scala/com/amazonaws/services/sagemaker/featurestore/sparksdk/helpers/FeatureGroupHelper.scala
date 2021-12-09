@@ -52,9 +52,9 @@ object FeatureGroupHelper {
   }
 
   /** Check if directOfflineStore is set correctly.
-   *
+    *
    * @param describeResponse response of DescribeFeatureGroup.
-   */
+    */
   def checkDirectOfflineStore(
       describeResponse: DescribeFeatureGroupResponse,
       directOfflineStore: Boolean

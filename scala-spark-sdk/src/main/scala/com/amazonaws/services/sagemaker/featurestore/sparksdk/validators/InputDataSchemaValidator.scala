@@ -191,8 +191,7 @@ object InputDataSchemaValidator {
         conversion(featureName).isNull && col(featureName).isNotNull
           || col(featureName).isNaN
           || col(recordIdentifierName).isNull
-          || col(eventTimeFeatureName).isNull
-        ,
+          || col(eventTimeFeatureName).isNull,
         lit(featureName + " not valid")
       ).otherwise(lit(null))
     }
