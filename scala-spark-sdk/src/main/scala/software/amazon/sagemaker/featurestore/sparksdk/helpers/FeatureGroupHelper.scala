@@ -1,5 +1,5 @@
 /*
- *  Copyright 2010-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License").
  *  You may not use this file except in compliance with the License.
@@ -14,17 +14,18 @@
  *
  */
 
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers
+package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureGroupStatus}
+import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 
 object FeatureGroupHelper {
 
   /** Check if FeatureGroup is in "Created" status.
-    *
-    * @param describeResponse response of DescribeFeatureGroup.
-    */
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   */
   def checkIfFeatureGroupIsCreated(describeResponse: DescribeFeatureGroupResponse): Unit = {
     if (!FeatureGroupStatus.CREATED.equals(describeResponse.featureGroupStatus())) {
       throw ValidationError(
@@ -35,10 +36,11 @@ object FeatureGroupHelper {
     }
   }
 
-  /** Check if FeatureGroup is in "Created" status.
-    *
-   * @param describeResponse response of DescribeFeatureGroup.
-    */
+  /** Check if feature group arn fetched from DescribeFeatureGroupResponse is the same as what customer provides.
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   */
   def checkIfFeatureGroupArnIdentical(
       describeResponse: DescribeFeatureGroupResponse,
       providedFeatureGroupArn: String
@@ -52,9 +54,10 @@ object FeatureGroupHelper {
   }
 
   /** Check if directOfflineStore is set correctly.
-    *
-   * @param describeResponse response of DescribeFeatureGroup.
-    */
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   */
   def checkDirectOfflineStore(
       describeResponse: DescribeFeatureGroupResponse,
       directOfflineStore: Boolean
@@ -67,32 +70,38 @@ object FeatureGroupHelper {
   }
 
   /** Check if FeatureGruop has OnlineStore enabled.
-    *
-   * @param describeResponse response of DescribeFeatureGroup.
-    * @return true if OnlineStore of FeatureGroup is enabled.
-    */
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   *  @return
+   *    true if OnlineStore of FeatureGroup is enabled.
+   */
   def isFeatureGroupOnlineStoreEnabled(describeResponse: DescribeFeatureGroupResponse): Boolean = {
-    val onlineStoreConfig = describeResponse.onlineStoreConfig()
+    val onlineStoreConfig = Option(describeResponse.onlineStoreConfig())
 
-    onlineStoreConfig != null && onlineStoreConfig.enableOnlineStore()
+    onlineStoreConfig.nonEmpty && onlineStoreConfig.get.enableOnlineStore()
   }
 
   /** Check if FeatureGruop has OfflineStore enabled.
-    *
-    * @param describeResponse response of DescribeFeatureGroup.
-    * @return true if OfflineStore of FeatureGroup is enabled.
-    */
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   *  @return
+   *    true if OfflineStore of FeatureGroup is enabled.
+   */
   def isFeatureGroupOfflineStoreEnabled(describeResponse: DescribeFeatureGroupResponse): Boolean = {
-    val offlineStoreConfig = describeResponse.offlineStoreConfig()
+    val offlineStoreConfig = Option(describeResponse.offlineStoreConfig())
 
-    offlineStoreConfig != null
+    offlineStoreConfig.nonEmpty
   }
 
   /** Generate the destination file path of output data.
-    *
-    * @param describeResponse response of DescribeFeatureGroup.
-    * @return The generated S3 ouput path of data files.
-    */
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   *  @return
+   *    the generated S3 ouput path of data files.
+   */
   def generateDestinationFilePath(describeResponse: DescribeFeatureGroupResponse): String = {
     val resolvedOutputS3Uri = describeResponse
       .offlineStoreConfig()

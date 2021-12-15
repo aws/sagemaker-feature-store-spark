@@ -6,12 +6,17 @@ import subprocess
 
 from setuptools import setup
 from setuptools.command.install import install
+from pathlib import Path
 
 SPARK_HOME = os.getenv('SPARK_HOME')
 TEMP_PATH = "deps"
 VERSION_PATH = "VERSION"
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 in_spark_sdk = os.path.isfile("../scala-spark-sdk/build.sbt")
+# read the contents of your README file
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
+
 
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
@@ -76,8 +81,12 @@ else:
 
 setup(
     name="sagemaker_feature_store_pyspark",
+
+    long_description=long_description,
+    long_description_content_type='text/markdown',
+
     # version=read_version(),
-    version="0.0.18",
+    version="0.0.22",
     description="Amazon SageMaker FeatureStore PySpark Bindings",
     license="Apache License 2.0",
     zip_safe=False,

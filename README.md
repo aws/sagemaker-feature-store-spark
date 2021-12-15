@@ -1,8 +1,6 @@
-# <img alt="SageMaker" src="icon/sagemaker-banner.png" />
-
 SageMaker FeatureStore Spark is an open source Spark library for [Amazon SageMaker FeatureStore](https://aws.amazon.com/sagemaker/feature-store/).
 
-With this spark library, you can easily ingest data to FeatureGroup's online and offline store from Spark `DataFrame`. Besides the spark library also provides method to load feature definitions.
+With this spark connector, you can easily ingest data to FeatureGroup's online and offline store from Spark `DataFrame`.
 
 ## Installation
 

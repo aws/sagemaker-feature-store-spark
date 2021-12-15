@@ -51,14 +51,8 @@ test_feature_group_name = 'sagemaker-feature-store-spark-test' + time.strftime("
 
 
 def clean_up(feature_group_name):
-    try:
-        sagemaker_client.delete_feature_group(FeatureGroupName=feature_group_name)
-        print(f"Deleted feature group: {feature_group_name}")
-    except Exception as e:
-        if e.response['Error']['Code'] == 'ResourceNotFound':
-            print(f"Feature group with name {feature_group_name} does not exist, skip cleanup")
-        else:
-            raise e
+    sagemaker_client.delete_feature_group(FeatureGroupName=feature_group_name)
+    print(f"Deleted feature group: {feature_group_name}")
 
 
 atexit.register(clean_up, test_feature_group_name)

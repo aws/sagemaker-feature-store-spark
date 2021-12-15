@@ -1,11 +1,11 @@
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.validators
+package software.amazon.sagemaker.featurestore.sparksdk.validators
 
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.assertEquals
 import org.testng.annotations.{DataProvider, Test}
 import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureDefinition, FeatureType}
+import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 
 import scala.Double.NaN
 
@@ -22,18 +22,18 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
     expectedExceptions = Array(classOf[ValidationError]),
     dataProvider = "validateSchemaNegativeTestDataProvider"
   )
-  def validateSchemaTest_negative(testDataFrame: DataFrame): Unit = {
+  def validateDataFrameTest_negative(testDataFrame: DataFrame): Unit = {
     val response = buildTestDescribeFeatureGroupResponse()
-    InputDataSchemaValidator.validateSchema(testDataFrame, response)
+    InputDataSchemaValidator.validateInputDataFrame(testDataFrame, response)
   }
 
   @Test(
     dataProvider = "validateSchemaPositiveTestDataProvider"
   )
-  def validateSchemaTest_positive(testDataFrame: DataFrame, expectedDataTypeMap: Map[String, String]): Unit = {
-    val response        = buildTestDescribeFeatureGroupResponse()
-    val validatedSchema = InputDataSchemaValidator.validateSchema(testDataFrame, response)
-    for (field <- validatedSchema.schema.fields) {
+  def validateDataFrameTest_positive(testDataFrame: DataFrame, expectedDataTypeMap: Map[String, String]): Unit = {
+    val response           = buildTestDescribeFeatureGroupResponse()
+    val validatedDataFrame = InputDataSchemaValidator.validateInputDataFrame(testDataFrame, response)
+    for (field <- validatedDataFrame.schema.fields) {
       assertEquals(field.dataType.typeName, expectedDataTypeMap(field.name))
     }
   }

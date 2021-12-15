@@ -1,5 +1,5 @@
 /*
- *  Copyright 2010-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License").
  *  You may not use this file except in compliance with the License.
@@ -14,18 +14,18 @@
  *
  */
 
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers
+package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
 import org.apache.spark.sql.SparkSession
 
 object SparkSessionInitializer {
 
-  /**
-    * Initialize the spark session
-    *
-   * @param sparkSession spark session to be initialized
-    */
-  def initialieSparkSession(sparkSession: SparkSession): Unit = {
+  /** Initialize the spark session
+   *
+   *  @param sparkSession
+   *    spark session to be initialized
+   */
+  def initializeSparkSession(sparkSession: SparkSession): Unit = {
     val credentials_provider = List(
       "com.amazonaws.auth.ContainerCredentialsProvider",
       "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
@@ -35,12 +35,13 @@ object SparkSessionInitializer {
       .set("fs.s3a.aws.credentials.provider", credentials_provider)
   }
 
-  /**
-    * Initialize the spark session for offline store
-    *
-   * @param sparkSession spark session to be initialized
-    * @param offlineStoreEncryptionKmsKeyId KmsKey specified in offline store configuraiton of feature group
-    */
+  /** Initialize the spark session for offline store
+   *
+   *  @param sparkSession
+   *    spark session to be initialized
+   *  @param offlineStoreEncryptionKmsKeyId
+   *    KmsKey specified in offline store configuraiton of feature group
+   */
   def initializeSparkSessionForOfflineStore(
       sparkSession: SparkSession,
       offlineStoreEncryptionKmsKeyId: String,

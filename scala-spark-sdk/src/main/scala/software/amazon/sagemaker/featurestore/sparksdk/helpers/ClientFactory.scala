@@ -1,5 +1,5 @@
 /*
- *  Copyright 2010-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License").
  *  You may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  *
  */
 
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers
+package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
 import com.google.common.annotations.VisibleForTesting
 import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration
@@ -26,21 +26,33 @@ import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.{
   SageMakerFeatureStoreRuntimeClientBuilder
 }
 
-/**
-  * This factory provides the default client and configurations.
-  */
+/** This factory provides the default client and configurations.
+ */
 object ClientFactory {
 
-  private final val DEFAULT_MAX_NUMBER_RETRIES = 10
-  var sageMakerClient: SageMakerClient         = getDefaultSageMakerClient
-  var sageMakerFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder =
+  private final val DEFAULT_MAX_NUMBER_RETRIES  = 10
+  private var _sageMakerClient: SageMakerClient = getDefaultSageMakerClient
+  private var _sageMakerFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder =
     getDefaultFeatureStoreRuntimeClientBuilder
 
-  /**
-    * Genereate default SageMakerClient
-    *
-   * @return sagemaker client
-    */
+  // Getters
+  def sageMakerClient: SageMakerClient = _sageMakerClient
+  def sageMakerFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder =
+    _sageMakerFeatureStoreRuntimeClientBuilder
+
+  // Setters
+  @VisibleForTesting
+  def sageMakerClient_=(client: SageMakerClient): Unit = _sageMakerClient = client
+  @VisibleForTesting
+  def sageMakerFeatureStoreRuntimeClientBuilder_=(
+      runtimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder
+  ): Unit = _sageMakerFeatureStoreRuntimeClientBuilder = runtimeClientBuilder
+
+  /** Genereate default SageMakerClient
+   *
+   *  @return
+   *    sagemaker client
+   */
   def getDefaultSageMakerClient: SageMakerClient = {
     SageMakerClient
       .builder()
@@ -48,11 +60,11 @@ object ClientFactory {
       .build()
   }
 
-  /**
-    * Genereate default feature store runtime client
-    *
-   * @return feature store runtime client
-    */
+  /** Genereate default feature store runtime client
+   *
+   *  @return
+   *    feature store runtime client
+   */
   def getDefaultFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder = {
     SageMakerFeatureStoreRuntimeClient
       .builder()
@@ -65,24 +77,13 @@ object ClientFactory {
       )
   }
 
-  /**
-    * Genereate default feature store runtime retry policy
-    *
-   * @return feature store runtime retry policy
-    */
+  /** Genereate default feature store runtime retry policy
+   *
+   *  @return
+   *    feature store runtime retry policy
+   */
   def getDefaultFeatureStoreRuntimeRetryPolicy: RetryPolicy = {
     RetryPolicy.builder().numRetries(DEFAULT_MAX_NUMBER_RETRIES).build()
   }
 
-  @VisibleForTesting
-  def setSageMakerClient(sageMakerClient: SageMakerClient): Unit = {
-    this.sageMakerClient = sageMakerClient
-  }
-
-  @VisibleForTesting
-  def setSageMakerFeatureStoreRuntimeClientBuilder(
-      sageMakerFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder
-  ): Unit = {
-    this.sageMakerFeatureStoreRuntimeClientBuilder = sageMakerFeatureStoreRuntimeClientBuilder
-  }
 }

@@ -1,4 +1,4 @@
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers
+package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.annotations.{DataProvider, Test}
@@ -14,8 +14,8 @@ class SparkSessionInitializerTest extends TestNGSuite {
     .getOrCreate()
 
   @Test
-  def initialieSparkSessionTest(): Unit = {
-    SparkSessionInitializer.initialieSparkSession(sparkSession)
+  def initializeSparkSessionTest(): Unit = {
+    SparkSessionInitializer.initializeSparkSession(sparkSession)
 
     assertEquals(
       sparkSession.sparkContext.hadoopConfiguration

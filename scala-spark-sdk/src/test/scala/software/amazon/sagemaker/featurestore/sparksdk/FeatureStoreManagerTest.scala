@@ -1,6 +1,5 @@
-package com.amazonaws.services.sagemaker.featurestore.sparksdk
+package software.amazon.sagemaker.featurestore.sparksdk
 
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers.ClientFactory
 import collection.JavaConverters._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -32,6 +31,8 @@ import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.{
   SageMakerFeatureStoreRuntimeClient,
   SageMakerFeatureStoreRuntimeClientBuilder
 }
+import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
+import software.amazon.sagemaker.featurestore.sparksdk.helpers.ClientFactory
 
 import java.io.File
 import scala.reflect.io.Directory
@@ -57,8 +58,8 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
 
   @BeforeClass
   def setup(): Unit = {
-    ClientFactory.setSageMakerClient(mockedSageMakerClient)
-    ClientFactory.setSageMakerFeatureStoreRuntimeClientBuilder(mockedSageMakerFeatureStoreRuntimeClientBuilder)
+    ClientFactory.sageMakerClient = mockedSageMakerClient
+    ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder = mockedSageMakerFeatureStoreRuntimeClientBuilder
 
     when(mockedSageMakerFeatureStoreRuntimeClientBuilder.build()).thenReturn(mockedSageMakerFeatureStoreRuntimeClient)
     when(mockedSageMakerFeatureStoreRuntimeClient.putRecord(any(classOf[PutRecordRequest])))
@@ -220,6 +221,16 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
     assertEquals(featureDefinitions, expectedFeatureDefinitions.asJava)
   }
 
+  @Test(
+    dataProvider = "loadFeatureDefinitionsFromSchemaNegativeTestDataProvider",
+    expectedExceptions = Array(classOf[ValidationError])
+  )
+  def loadFeatureDefinitionsFromSchemaTest_negative(
+      inputDataFrame: DataFrame
+  ): Unit = {
+    featureStoreManager.loadFeatureDefinitionsFromSchema(inputDataFrame)
+  }
+
   @DataProvider
   def ingestDataTestDataProvider(): Array[Array[Any]] = {
     Array(
@@ -257,6 +268,16 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
           FeatureDefinition.builder().featureName("feature-fractional").featureType(FeatureType.FRACTIONAL).build(),
           FeatureDefinition.builder().featureName("feature-string").featureType(FeatureType.STRING).build()
         )
+      )
+    )
+  }
+
+  @DataProvider
+  def loadFeatureDefinitionsFromSchemaNegativeTestDataProvider(): Array[Array[Any]] = {
+    Array(
+      Array(
+        Seq((123, 100.0, true))
+          .toDF("feature-integral", "feature-fractional", "feature-boolean")
       )
     )
   }

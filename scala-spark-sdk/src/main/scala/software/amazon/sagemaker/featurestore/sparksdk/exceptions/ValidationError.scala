@@ -1,5 +1,5 @@
 /*
- *  Copyright 2010-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License").
  *  You may not use this file except in compliance with the License.
@@ -14,11 +14,11 @@
  *
  */
 
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions
+package software.amazon.sagemaker.featurestore.sparksdk.exceptions
 
-/**
-  * Throw if any failures occur during data schema validation
-  *
- * @param message Message describing the failure details.
-  */
+/** Throw if any failures occur during data schema validation
+ *
+ *  @param message
+ *    Message describing the failure details.
+ */
 case class ValidationError(message: String) extends RuntimeException(message)

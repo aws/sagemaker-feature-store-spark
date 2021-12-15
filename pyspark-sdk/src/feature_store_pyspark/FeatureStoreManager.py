@@ -1,4 +1,4 @@
-# Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License").
 # You may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
     the format of spark DataFrame and feature_group_arn is the specified feature group's arn. To selectively ingest via
     offline/online store, flip the flag ``direct_offline_store`` according to different use cases.
     """
-    _wrapped_class = "com.amazonaws.services.sagemaker.featurestore.sparksdk.FeatureStoreManager"
+    _wrapped_class = "software.amazon.sagemaker.featurestore.sparksdk.FeatureStoreManager"
 
     def __init__(self):
         super(FeatureStoreManager, self).__init__()

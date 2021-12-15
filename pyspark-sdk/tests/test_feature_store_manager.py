@@ -20,7 +20,7 @@ spark = SparkSession(sc)
 def test_feature_store_manager_ingest_data():
     feature_store_manager = FeatureStoreManager()
     assert feature_store_manager._wrapped_class == \
-           "com.amazonaws.services.sagemaker.featurestore." \
+           "software.amazon.sagemaker.featurestore." \
            "sparksdk.FeatureStoreManager"
 
     with patch('pyspark.ml.wrapper.JavaWrapper._call_java') as java_method_invocation:

@@ -1,31 +1,47 @@
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.validators
+/*
+ *  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License").
+ *  You may not use this file except in compliance with the License.
+ *  A copy of the License is located at
+ *
+ *      http://aws.amazon.com/apache2.0
+ *
+ *  or in the "license" file accompanying this file. This file is distributed
+ *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+ *  express or implied. See the License for the specific language governing
+ *  permissions and limitations under the License.
+ *
+ */
 
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions.ValidationError
+package software.amazon.sagemaker.featurestore.sparksdk.validators
+
 import org.apache.spark.sql.functions.{col, concat_ws, lit, when}
 import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.sql.{Column, DataFrame}
 import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureDefinition}
+import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 
 import java.util.regex.Pattern
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
 
-/**
-  * An object includes methods to detect schema errors of input DataFrame.
-  */
+/** An object includes methods to detect schema errors of input DataFrame.
+ */
 object InputDataSchemaValidator {
 
   val RESERVED_FEATURE_NAMES: Set[String] = Set("is_deleted", "write_time", "api_invocation_time")
   val TYPE_MAP: Map[String, String] =
     Map("Integral" -> "long", "String" -> "string", "Fractional" -> "double")
 
-  /**
-    * Validate input Spark DataFrame.
-    *
-    * @param dataFrame input Spark DataFrame to be ingested.
-    * @param describeResponse response of DescribeFeatureGroup
-    */
-  def validateSchema(
+  /** Validate input Spark DataFrame.
+   *
+   *  @param dataFrame
+   *    input Spark DataFrame to be ingested.
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup
+   */
+  def validateInputDataFrame(
       dataFrame: DataFrame,
       describeResponse: DescribeFeatureGroupResponse
   ): DataFrame = {
@@ -38,7 +54,6 @@ object InputDataSchemaValidator {
       .toStream
       .map(feature => feature.featureName())
       .toSet
-      .asJava
 
     validateSchemaNames(dataFrame.schema.names, featuresInFeatureGroup, recordIdentifierName, eventTimeFeatureName)
 
@@ -88,7 +103,7 @@ object InputDataSchemaValidator {
 
   private def validateSchemaNames(
       schemaNames: Array[String],
-      features: java.util.Set[String],
+      features: Set[String],
       recordIdentifierName: String,
       eventTimeFeatureName: String
   ): Unit = {
@@ -141,20 +156,23 @@ object InputDataSchemaValidator {
       featureDefinitions: List[FeatureDefinition],
       eventTimeFeatureName: String
   ): Map[String, String => Column] = {
-    var conversionsMap: Map[String, String => Column] = Map()
-
     val lambdaCreator = (sparkType: String) => (featureName: String) => col(featureName).cast(sparkType)
 
-    for (featureDefinition <- featureDefinitions) {
-      val featureName = featureDefinition.featureName()
-      val sparkType   = TYPE_MAP(featureDefinition.featureTypeAsString())
-      if (featureName.equals(eventTimeFeatureName)) {
-        conversionsMap += eventTimeFeatureName -> ((featureName: String) =>
-          col(featureName).cast(sparkType).cast(TimestampType)
-        )
-      } else if (dataFrame.schema.names.contains(featureName)) {
-        conversionsMap += (featureName -> lambdaCreator(sparkType))
-      }
+    val conversionsMap = featureDefinitions.foldLeft(Map.empty[String, String => Column]) {
+      (resultMap, featureDefinition) =>
+        {
+          val featureName = featureDefinition.featureName()
+          val sparkType   = TYPE_MAP(featureDefinition.featureTypeAsString())
+          if (featureName.equals(eventTimeFeatureName)) {
+            resultMap + (eventTimeFeatureName -> ((featureName: String) =>
+              col(featureName).cast(sparkType).cast(TimestampType)
+            ))
+          } else if (dataFrame.schema.names.contains(featureName)) {
+            resultMap + (featureName -> lambdaCreator(sparkType))
+          } else {
+            resultMap
+          }
+        }
     }
     conversionsMap
   }
@@ -178,24 +196,27 @@ object InputDataSchemaValidator {
       dataTypeValidatorMap: Map[String, String => Column],
       recordIdentifierName: String,
       eventTimeFeatureName: String
-  ): Seq[Column] = {
-    var dataTypeValidatorColumnArray = Seq[Column]()
-
+  ): List[Column] = {
     // Mark the row as not valid if:
     // 1. The data cannot be casted to the type specified in feature definition
     // 2. The value of data is NaN
     // 3. Feature value of event time feature is null
     // 4. Feature value of record identifier is null
-    for ((featureName, conversion) <- dataTypeValidatorMap) {
-      dataTypeValidatorColumnArray = dataTypeValidatorColumnArray :+ when(
-        conversion(featureName).isNull && col(featureName).isNotNull
-          || col(featureName).isNaN
-          || col(recordIdentifierName).isNull
-          || col(eventTimeFeatureName).isNull,
-        lit(featureName + " not valid")
-      ).otherwise(lit(null))
+    dataTypeValidatorMap.foldLeft(List[Column]()) { case (resultList, (featureName, conversion)) =>
+      if (featureName == recordIdentifierName || featureName == eventTimeFeatureName) {
+        resultList :+ when(
+          conversion(featureName).isNull && col(featureName).isNotNull
+            || col(featureName).isNaN
+            || col(featureName).isNull,
+          lit(featureName + " not valid")
+        ).otherwise(lit(null))
+      } else {
+        resultList :+ when(
+          conversion(featureName).isNull && col(featureName).isNotNull
+            || col(featureName).isNaN,
+          lit(featureName + " not valid")
+        ).otherwise(lit(null))
+      }
     }
-
-    dataTypeValidatorColumnArray
   }
 }

@@ -1,5 +1,5 @@
 /*
- *  Copyright 2010-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License").
  *  You may not use this file except in compliance with the License.
@@ -14,18 +14,17 @@
  *
  */
 
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers
+package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions.ValidationError
+import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 
 import scala.util.matching.Regex
 
-/**
-  * A helper to reso
-  * lve different resources from feature group arn.
-  *
- * @param featureGroupArn Arn of a feature group
-  */
+/** A helper to resolve information from feature group arn.
+ *
+ *  @param featureGroupArn
+ *    Arn of a feature group
+ */
 class FeatureGroupArnResolver(val featureGroupArn: String) {
 
   private final val FEATURE_GROUP_ARN_PATTERN =
@@ -35,20 +34,20 @@ class FeatureGroupArnResolver(val featureGroupArn: String) {
 
   private final val featureGroupArnParts = featureGroupArn.split(':')
 
-  /**
-    * Resolve featur group name from arn.
-    *
-   * @return feature group name
-    */
+  /** Resolve featur group name from arn.
+   *
+   *  @return
+   *    feature group name
+   */
   def resolveFeatureGroupName(): String = {
     featureGroupArn.split('/')(1)
   }
 
-  /**
-    * Resolve region from arn
-    *
-   * @return region
-    */
+  /** Resolve region from arn
+   *
+   *  @return
+   *    region
+   */
   def resolveRegion(): String = {
     featureGroupArnParts(3)
   }

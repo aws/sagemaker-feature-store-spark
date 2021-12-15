@@ -1,9 +1,9 @@
-package com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers
+package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.assertEquals
 import org.testng.annotations.Test
+import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 
 class FeatureGroupArnResolverTest extends TestNGSuite {
 

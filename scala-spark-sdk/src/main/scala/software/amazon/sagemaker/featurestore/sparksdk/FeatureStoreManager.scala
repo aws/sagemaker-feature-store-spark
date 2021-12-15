@@ -1,5 +1,5 @@
 /*
- *  Copyright 2010-2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License").
  *  You may not use this file except in compliance with the License.
@@ -14,19 +14,21 @@
  *
  */
 
-package com.amazonaws.services.sagemaker.featurestore.sparksdk
+package software.amazon.sagemaker.featurestore.sparksdk
 
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.exceptions.ValidationError
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers.FeatureGroupHelper._
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.helpers.{
-  ClientFactory,
-  DataFrameRepartitioner,
-  FeatureGroupArnResolver,
-  SparkSessionInitializer
-}
-import com.amazonaws.services.sagemaker.featurestore.sparksdk.validators.InputDataSchemaValidator._
+import software.amazon.sagemaker.featurestore.sparksdk.helpers.FeatureGroupHelper._
+import software.amazon.sagemaker.featurestore.sparksdk.validators.InputDataSchemaValidator._
 import org.apache.spark.sql.functions.{col, current_timestamp, date_format, lit}
-import org.apache.spark.sql.types.{DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType}
+import org.apache.spark.sql.types.{
+  ByteType,
+  DataType,
+  DoubleType,
+  FloatType,
+  IntegerType,
+  LongType,
+  ShortType,
+  StringType
+}
 
 import collection.JavaConverters._
 import org.apache.spark.sql.{DataFrame, Row}
@@ -38,10 +40,16 @@ import software.amazon.awssdk.services.sagemaker.model.{
 }
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.SageMakerFeatureStoreRuntimeClient
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{FeatureValue, PutRecordRequest}
+import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
+import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
+  ClientFactory,
+  DataFrameRepartitioner,
+  FeatureGroupArnResolver,
+  SparkSessionInitializer
+}
 
 import java.util
 import scala.collection.mutable.ListBuffer
-import scala.util.{Failure, Success, Try}
 
 class FeatureStoreManager extends Serializable {
 
@@ -49,25 +57,24 @@ class FeatureStoreManager extends Serializable {
     StringType  -> FeatureType.STRING,
     DoubleType  -> FeatureType.FRACTIONAL,
     FloatType   -> FeatureType.FRACTIONAL,
+    ByteType    -> FeatureType.INTEGRAL,
     ShortType   -> FeatureType.INTEGRAL,
     IntegerType -> FeatureType.INTEGRAL,
     LongType    -> FeatureType.INTEGRAL
   )
 
-  /**
-    * Batch ingest data into SageMaker FeatureStore.
-    *
-    * @param inputDataFrame input Spark DataFrame to be ingested.
-    * @param featureGroupArn .arn of a feature group.
-    * @param directOfflineStore choose if data should be only ingested to OfflineStore of a FeatureGroup.
-    */
+  /** Batch ingest data into SageMaker FeatureStore.
+   *
+   *  @param inputDataFrame
+   *    input Spark DataFrame to be ingested.
+   *  @param featureGroupArn
+   *    arn of a feature group.
+   *  @param directOfflineStore
+   *    choose if data should be only ingested to OfflineStore of a FeatureGroup.
+   */
   def ingestData(inputDataFrame: DataFrame, featureGroupArn: String, directOfflineStore: Boolean = false): Unit = {
 
-    var startTimeMillis = System.currentTimeMillis()
-
-    SparkSessionInitializer.initialieSparkSession(inputDataFrame.sparkSession)
-
-    var durationSeconds = (System.currentTimeMillis() - startTimeMillis) / 1000
+    SparkSessionInitializer.initializeSparkSession(inputDataFrame.sparkSession)
 
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
     val featureGroupName        = featureGroupArnResolver.resolveFeatureGroupName()
@@ -79,14 +86,8 @@ class FeatureStoreManager extends Serializable {
     checkIfFeatureGroupIsCreated(describeResponse)
     checkDirectOfflineStore(describeResponse, directOfflineStore)
 
-    val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
-
-    startTimeMillis = System.currentTimeMillis()
-
-    val validatedInputDataFrame = validateSchema(inputDataFrame, describeResponse)
-
-    durationSeconds = (System.currentTimeMillis() - startTimeMillis) / 1000
-    println(s"time elapsed for data schema validation: $durationSeconds seconds")
+    val eventTimeFeatureName    = describeResponse.eventTimeFeatureName()
+    val validatedInputDataFrame = validateInputDataFrame(inputDataFrame, describeResponse)
 
     if (directOfflineStore || !isFeatureGroupOnlineStoreEnabled(describeResponse)) {
       batchIngestIntoOfflineStore(
@@ -100,21 +101,29 @@ class FeatureStoreManager extends Serializable {
     }
   }
 
-  /**
-    * Load feature definitions according to the schema of input data frame.
-    *
-    * @param inputDataFrame input Spark DataFrame to be loaded.
-    * @return list of feature definitions.
-    */
+  /** Load feature definitions according to the schema of input data frame.
+   *
+   *  @param inputDataFrame
+   *    input Spark DataFrame to be loaded.
+   *  @return
+   *    list of feature definitions.
+   */
   def loadFeatureDefinitionsFromSchema(inputDataFrame: DataFrame): util.List[FeatureDefinition] = {
-    val featureDefinitions: ListBuffer[FeatureDefinition] = ListBuffer()
-    val fields                                            = inputDataFrame.schema.fields
-    for (field <- fields) {
-      featureDefinitions += FeatureDefinition
-        .builder()
-        .featureName(field.name)
-        .featureType(SPARK_TYPE_TO_FEATURE_TYPE_MAP.getOrElse(field.dataType, default = FeatureType.STRING))
-        .build()
+    val fields = inputDataFrame.schema.fields
+    val featureDefinitions: List[FeatureDefinition] = fields.foldLeft(List[FeatureDefinition]()) {
+      (resultList, field) =>
+        SPARK_TYPE_TO_FEATURE_TYPE_MAP.get(field.dataType) match {
+          case Some(featureType) =>
+            resultList :+ FeatureDefinition
+              .builder()
+              .featureName(field.name)
+              .featureType(featureType)
+              .build()
+          case None =>
+            throw ValidationError(
+              f"Found unsupported data type from schema '${field.dataType}' which cannot be converted to a corresponding feature type."
+            )
+        }
     }
     featureDefinitions.asJava
   }
@@ -138,36 +147,33 @@ class FeatureStoreManager extends Serializable {
       columns: Array[String],
       runTimeClient: SageMakerFeatureStoreRuntimeClient
   ): Unit = {
-    for (row <- rows) {
+    rows.foreach(row => {
       val record = ListBuffer[FeatureValue]()
-      for (columnName <- columns) {
-        Try(row.getAs[Any](columnName)) match {
-          case Success(s) =>
-            if (s != null) {
-              record += FeatureValue
-                .builder()
-                .featureName(columnName)
-                .valueAsString(s.toString)
-                .build()
-            }
-          case Failure(e) => throw new RuntimeException(e)
+      columns.foreach(columnName => {
+        try {
+          if (!row.isNullAt(row.fieldIndex(columnName))) {
+            val featureValue = row.getAs[Any](columnName)
+            record += FeatureValue
+              .builder()
+              .featureName(columnName)
+              .valueAsString(featureValue.toString)
+              .build()
+          }
+        } catch {
+          case e: Throwable => throw new RuntimeException(e)
         }
-      }
-      Try {
+      })
+      try {
         val putRecordRequest = PutRecordRequest
           .builder()
           .featureGroupName(featureGroupName)
           .record(record.asJava)
           .build()
         runTimeClient.putRecord(putRecordRequest)
-      } match {
-        case Success(s) =>
-        case Failure(e) =>
-          throw new RuntimeException(
-            s"Failed to put record '$record', due to exception '$e'"
-          )
+      } catch {
+        case e: Throwable => throw new RuntimeException(e)
       }
-    }
+    })
   }
 
   private def batchIngestIntoOfflineStore(
@@ -193,26 +199,20 @@ class FeatureStoreManager extends Serializable {
     )
 
     val destinationFilePath = generateDestinationFilePath(describeResponse)
-    var tempDataFrame = dataFrame.withColumn(
-      "temp_event_time_col",
-      col(eventTimeFeatureName).cast("Timestamp")
-    )
-
-    tempDataFrame = tempDataFrame
+    val tempDataFrame = dataFrame
+      .withColumn("temp_event_time_col", col(eventTimeFeatureName).cast("Timestamp"))
       .withColumn("year", date_format(col("temp_event_time_col"), "yyyy"))
       .withColumn("month", date_format(col("temp_event_time_col"), "MM"))
       .withColumn("day", date_format(col("temp_event_time_col"), "dd"))
       .withColumn("hour", date_format(col("temp_event_time_col"), "HH"))
-
-    tempDataFrame = tempDataFrame.drop("temp_event_time_col")
-
-    tempDataFrame = tempDataFrame
       .withColumn("api_invocation_time", current_timestamp())
       .withColumn("write_time", current_timestamp())
+      .withColumn("is_deleted", lit(false))
+      .drop("temp_event_time_col")
 
-    tempDataFrame = tempDataFrame.withColumn("is_deleted", lit(false))
-
-    tempDataFrame.write
+    tempDataFrame
+      .repartition(col("year"), col("month"), col("day"), col("hour"))
+      .write
       .partitionBy("year", "month", "day", "hour")
       .option("compression", "none")
       .mode("append")

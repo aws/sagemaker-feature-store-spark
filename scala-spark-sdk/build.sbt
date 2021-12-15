@@ -1,7 +1,9 @@
-organization := "com.amazonaws"
+organization := "software.amazon.sagemaker.featurestore"
 organizationName := "Amazon Web Services"
 organizationHomepage := Some(url("https://aws.amazon.com"))
 name := "sagemaker-feature-store-spark-sdk"
+description := "This library provides a connector to Amazon SageMaker FeatureStore, allowing " +
+  "customers to easily ingest data in scale to online/offline store."
 
 homepage := Some(url("https://github.com/aws/sagemaker-feature-store-spark"))
 scmInfo := Some(
@@ -55,4 +57,42 @@ jacocoReportSettings := JacocoReportSettings()
   .withThresholds(
     JacocoThresholds(
       line = 90)
+  )
+
+publishMavenStyle := true
+pomIncludeRepository := { _ => false }
+publishArtifact in Test := false
+val nexusUriHost = "aws.oss.sonatype.org"
+val nexusUriHostWithScheme = "https://" + nexusUriHost + "/"
+val snapshotUrl = nexusUriHostWithScheme + "content/repositories/snapshots"
+val localReleaseUrl = nexusUriHostWithScheme + "service/local"
+val releaseUrl = localReleaseUrl + "/staging/deploy/maven2"
+
+publishTo := {
+  if (isSnapshot.value)
+    Some("snapshots" at snapshotUrl)
+  else
+    Some("releases" at releaseUrl)
+}
+
+Sonatype.SonatypeKeys.sonatypeRepository := localReleaseUrl
+Sonatype.SonatypeKeys.sonatypeCredentialHost := nexusUriHost
+
+credentials += Credentials(
+  "Sonatype Nexus Repository Manager",
+  nexusUriHost,
+  sys.env.getOrElse("SONATYPE_USERNAME", "NOT_A_PUBLISH_BUILD"),
+  sys.env.getOrElse("SONATYPE_PASSWORD", "NOT_A_PUBLISH_BUILD")
+)
+pomExtra := (
+  <developers>
+    <developer>
+      <id>amazonwebservices</id>
+      <organization>Amazon Web Services</organization>
+      <organizationUrl>https://aws.amazon.com</organizationUrl>
+      <roles>
+        <role>developer</role>
+      </roles>
+    </developer>
+  </developers>
   )

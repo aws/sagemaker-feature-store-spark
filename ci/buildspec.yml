@@ -5,6 +5,8 @@ phases:
     runtime-versions:
       python: 3.7
       java: openjdk8
+    commands:
+      - pip3 install tox
 
   pre_build:
     commands:
@@ -21,6 +23,7 @@ phases:
       - echo Packaging pyspark library according to setup.py
       - cd pyspark-sdk
       - python setup.py sdist
+      - tox
       - echo Packaging finished, start running integration test
       - cd integration_test
       - ./run-spark-integration-test
