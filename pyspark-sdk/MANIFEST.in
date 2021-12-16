@@ -1,0 +1,6 @@
+global-exclude *.py[cod] __pycache__ .DS_Store
+
+include VERSION
+include README.md
+
+recursive-include deps/jars *.jar

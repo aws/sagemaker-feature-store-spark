@@ -1,0 +1,17 @@
+.DS_Store
+pyspark-sdk/.coverage
+pyspark-sdk/.tox/
+scala-spark-sdk/.bsp/
+scala-spark-sdk/.idea/
+.idea/
+pyspark-sdk/deps/
+pyspark-sdk/dist/
+pyspark-sdk/sagemaker_feature_store_pyspark.egg-info/
+scala-spark-sdk/project/target/
+scala-spark-sdk/target
+scala-spark-sdk/project/project/
+scala-spark-sdk/test-output
+pyspark-sdk/tests/__pycache__/
+project
+target
+pyspark-sdk/VERSION

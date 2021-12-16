@@ -1,0 +1,32 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.7
+      java: openjdk8
+    commands:
+      - pip3 install tox
+
+  pre_build:
+    commands:
+      - export SBT_OPTS="-XX:MaxMetaspaceSize=1024M"
+      - echo Start building Feature Store Spark Library
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Verifying scala package build, code format and test coverage
+      - cd scala-spark-sdk
+      - sbt scalafmtCheckAll jacoco
+      - cd ..
+      - echo Scala pacakge build verification finished
+      - echo Packaging pyspark library according to setup.py
+      - cd pyspark-sdk
+      - python setup.py sdist
+      - tox
+      - echo Packaging finished, start running integration test
+      - cd integration_test
+      - ./run-spark-integration-test
+  post_build:
+    commands:
+      - echo Build completed on `date`
