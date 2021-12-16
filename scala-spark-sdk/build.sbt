@@ -18,8 +18,7 @@ lazy val SageMakerFeatureStoreSpark = (project in file("."))
 val sparkVersion = System.getProperty("SPARK_VERSION", "3.1.2")
 version := {
  val base = baseDirectory.in(SageMakerFeatureStoreSpark).value
- val packageVersion = IO.read(base / ".." / "VERSION").trim
- s"spark_$sparkVersion-$packageVersion"
+ IO.read(base / ".." / "VERSION").trim
 }
 
 scalaVersion := "2.12.8"

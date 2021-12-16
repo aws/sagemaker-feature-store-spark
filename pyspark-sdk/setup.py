@@ -85,8 +85,7 @@ setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
 
-    # version=read_version(),
-    version="0.0.22",
+    version=read_version(),
     description="Amazon SageMaker FeatureStore PySpark Bindings",
     license="Apache License 2.0",
     zip_safe=False,
