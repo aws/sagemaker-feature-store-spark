@@ -73,6 +73,7 @@ class FeatureStoreManager extends Serializable {
    *    choose if data should be only ingested to OfflineStore of a FeatureGroup.
    */
   def ingestData(inputDataFrame: DataFrame, featureGroupArn: String, directOfflineStore: Boolean = false): Unit = {
+    validateDataFrameSchema(inputDataFrame, featureGroupArn)
 
     SparkSessionInitializer.initializeSparkSession(inputDataFrame.sparkSession)
 
@@ -82,22 +83,20 @@ class FeatureStoreManager extends Serializable {
 
     val describeResponse = getFeatureGroup(featureGroupName)
 
-    checkIfFeatureGroupArnIdentical(describeResponse, featureGroupArn)
-    checkIfFeatureGroupIsCreated(describeResponse)
     checkDirectOfflineStore(describeResponse, directOfflineStore)
 
-    val eventTimeFeatureName    = describeResponse.eventTimeFeatureName()
-    val validatedInputDataFrame = validateInputDataFrame(inputDataFrame, describeResponse)
+    val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
+    val transformedDataFrame = transformDataFrameType(inputDataFrame, describeResponse)
 
     if (directOfflineStore || !isFeatureGroupOnlineStoreEnabled(describeResponse)) {
       batchIngestIntoOfflineStore(
-        validatedInputDataFrame,
+        transformedDataFrame,
         describeResponse,
         eventTimeFeatureName,
         region
       )
     } else {
-      streamIngestIntoOnlineStore(featureGroupName, validatedInputDataFrame)
+      streamIngestIntoOnlineStore(featureGroupName, transformedDataFrame)
     }
   }
 
@@ -126,6 +125,24 @@ class FeatureStoreManager extends Serializable {
         }
     }
     featureDefinitions.asJava
+  }
+
+  /** Validate data against SageMaker Feature Group schema.
+   *  @param inputDataFrame
+   *    input Spark DataFrame to be validated.
+   *  @param featureGroupArn
+   *    arn of a Feature Group.
+   */
+  def validateDataFrameSchema(inputDataFrame: DataFrame, featureGroupArn: String): Unit = {
+    val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
+    val featureGroupName        = featureGroupArnResolver.resolveFeatureGroupName()
+
+    val describeResponse = getFeatureGroup(featureGroupName)
+
+    checkIfFeatureGroupArnIdentical(describeResponse, featureGroupArn)
+    checkIfFeatureGroupIsCreated(describeResponse)
+
+    validateInputDataFrame(inputDataFrame, describeResponse)
   }
 
   private def streamIngestIntoOnlineStore(featureGroupName: String, inputDataFrame: DataFrame): Unit = {

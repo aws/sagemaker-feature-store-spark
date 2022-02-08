@@ -44,7 +44,7 @@ object InputDataSchemaValidator {
   def validateInputDataFrame(
       dataFrame: DataFrame,
       describeResponse: DescribeFeatureGroupResponse
-  ): DataFrame = {
+  ): Unit = {
     val recordIdentifierName = describeResponse.recordIdentifierFeatureName()
     val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
 
@@ -89,7 +89,15 @@ object InputDataSchemaValidator {
           "or records values equal to NaN."
       )
     }
+  }
 
+  def transformDataFrameType(dataFrame: DataFrame, describeResponse: DescribeFeatureGroupResponse): DataFrame = {
+    val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
+    val schemaDataTypeValidatorMap = getSchemaDataTypeValidatorMap(
+      dataFrame = dataFrame,
+      featureDefinitions = describeResponse.featureDefinitions().asScala.toList,
+      describeResponse.eventTimeFeatureName()
+    )
     val dataTypeTransformationMap = getSchemaDataTypeTransformationMap(
       schemaDataTypeValidatorMap,
       describeResponse.featureDefinitions().asScala.toList,
@@ -107,10 +115,11 @@ object InputDataSchemaValidator {
       recordIdentifierName: String,
       eventTimeFeatureName: String
   ): Unit = {
-    val invalidCharSet              = "[,;{}()\n\t=]"
-    val invalidCharSetPattern       = Pattern.compile(invalidCharSet)
-    val unknown_columns             = ListBuffer[String]()
-    var missingRequiredFeatureNames = Set(recordIdentifierName, eventTimeFeatureName)
+    val invalidCharSet        = "[,;{}()\n\t=]"
+    val invalidCharSetPattern = Pattern.compile(invalidCharSet)
+    val unknown_columns       = ListBuffer[String]()
+    var recordIdMatch         = false
+    var eventTimeMatch        = false
 
     for (name <- schemaNames) {
       // Verify there are no invalid characters ",;{}()\n\t=" in the schema names.
@@ -131,8 +140,12 @@ object InputDataSchemaValidator {
         unknown_columns += name
       }
 
-      if (missingRequiredFeatureNames.contains(name)) {
-        missingRequiredFeatureNames -= name
+      if (name == recordIdentifierName) {
+        recordIdMatch = true
+      }
+
+      if (name == eventTimeFeatureName) {
+        eventTimeMatch = true
       }
     }
 
@@ -144,9 +157,14 @@ object InputDataSchemaValidator {
     }
 
     // Verify all required feature names are present in schema.
-    if (missingRequiredFeatureNames.nonEmpty) {
+    if (!recordIdMatch) {
       throw ValidationError(
-        s"Cannot proceed. Missing feature names '$missingRequiredFeatureNames' in schema."
+        s"Cannot proceed. Missing required record id '$recordIdentifierName' in schema."
+      )
+    }
+    if (!eventTimeMatch) {
+      throw ValidationError(
+        s"Cannot proceed. Missing required event time '$eventTimeFeatureName' in schema." // TODO: hard code this error message?
       )
     }
   }

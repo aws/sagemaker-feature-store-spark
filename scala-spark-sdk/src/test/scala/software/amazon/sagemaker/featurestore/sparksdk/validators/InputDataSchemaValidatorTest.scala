@@ -30,10 +30,18 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
   @Test(
     dataProvider = "validateSchemaPositiveTestDataProvider"
   )
-  def validateDataFrameTest_positive(testDataFrame: DataFrame, expectedDataTypeMap: Map[String, String]): Unit = {
-    val response           = buildTestDescribeFeatureGroupResponse()
-    val validatedDataFrame = InputDataSchemaValidator.validateInputDataFrame(testDataFrame, response)
-    for (field <- validatedDataFrame.schema.fields) {
+  def validateDataFrameTest_positive(testDataFrame: DataFrame): Unit = {
+    val response = buildTestDescribeFeatureGroupResponse()
+    InputDataSchemaValidator.validateInputDataFrame(testDataFrame, response)
+  }
+
+  @Test(
+    dataProvider = "transformDataFrameTypeTestDataProvider"
+  )
+  def transformDataFrameTypeTest(testDataFrame: DataFrame, expectedDataTypeMap: Map[String, String]): Unit = {
+    val response             = buildTestDescribeFeatureGroupResponse()
+    val transformedDataFrame = InputDataSchemaValidator.transformDataFrameType(testDataFrame, response)
+    for (field <- transformedDataFrame.schema.fields) {
       assertEquals(field.dataType.typeName, expectedDataTypeMap(field.name))
     }
   }
@@ -83,6 +91,16 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
 
   @DataProvider
   def validateSchemaPositiveTestDataProvider(): Array[Array[Any]] = {
+    Array(
+      Array(
+        Seq(("identifier-1", "1631091971", "0.005", "test-feature", "100"))
+          .toDF("record-identifier", "event-time", "feature-fractional", "feature-string", "feature-integral")
+      )
+    )
+  }
+
+  @DataProvider
+  def transformDataFrameTypeTestDataProvider(): Array[Array[Any]] = {
     Array(
       Array(
         Seq(("identifier-1", "1631091971", "0.005", "test-feature", "100"))
