@@ -6,6 +6,7 @@ import atexit
 import unittest
 
 from datetime import datetime
+from py4j.protocol import Py4JJavaError
 
 try:
     import boto3
@@ -94,6 +95,20 @@ response = sagemaker_client.create_feature_group(
 )
 
 wait_for_feature_group_creation_complete(test_feature_group_name)
+
+# positive validation
+feature_store_manager.validate_data_frame_schema(
+    input_data_frame=identity_df,
+    feature_group_arn=response.get("FeatureGroupArn")
+)
+
+# negative validation
+non_matching_df = identity_df.withColumn("ExtraColumn", lit("extraValue"))
+with tc.assertRaises(Py4JJavaError):
+    feature_store_manager.validate_data_frame_schema(
+        input_data_frame=non_matching_df,
+        feature_group_arn=response.get("FeatureGorupArn")
+    )
 
 # offline store direct ingest
 feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_arn=response.get("FeatureGroupArn"),
