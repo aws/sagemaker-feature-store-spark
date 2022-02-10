@@ -73,8 +73,6 @@ class FeatureStoreManager extends Serializable {
    *    choose if data should be only ingested to OfflineStore of a FeatureGroup.
    */
   def ingestData(inputDataFrame: DataFrame, featureGroupArn: String, directOfflineStore: Boolean = false): Unit = {
-    validateDataFrameSchema(inputDataFrame, featureGroupArn)
-
     SparkSessionInitializer.initializeSparkSession(inputDataFrame.sparkSession)
 
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
@@ -82,6 +80,7 @@ class FeatureStoreManager extends Serializable {
     val region                  = featureGroupArnResolver.resolveRegion()
 
     val describeResponse = getFeatureGroup(featureGroupName)
+    validateDataFrameSchemaWithDescription(inputDataFrame, featureGroupArn, describeResponse)
 
     checkDirectOfflineStore(describeResponse, directOfflineStore)
 
@@ -139,10 +138,18 @@ class FeatureStoreManager extends Serializable {
 
     val describeResponse = getFeatureGroup(featureGroupName)
 
-    checkIfFeatureGroupArnIdentical(describeResponse, featureGroupArn)
-    checkIfFeatureGroupIsCreated(describeResponse)
+    validateDataFrameSchemaWithDescription(inputDataFrame, featureGroupArn, describeResponse)
+  }
 
-    validateInputDataFrame(inputDataFrame, describeResponse)
+  private def validateDataFrameSchemaWithDescription(
+      inputDataFrame: DataFrame,
+      featureGroupArn: String,
+      featureGroupDescription: DescribeFeatureGroupResponse
+  ): Unit = {
+    checkIfFeatureGroupArnIdentical(featureGroupDescription, featureGroupArn)
+    checkIfFeatureGroupIsCreated(featureGroupDescription)
+
+    validateInputDataFrame(inputDataFrame, featureGroupDescription)
   }
 
   private def streamIngestIntoOnlineStore(featureGroupName: String, inputDataFrame: DataFrame): Unit = {
