@@ -6,7 +6,6 @@ import atexit
 import unittest
 
 from datetime import datetime
-from py4j.protocol import Py4JJavaError
 
 try:
     import boto3
@@ -27,6 +26,8 @@ from feature_store_pyspark.FeatureStoreManager import FeatureStoreManager
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import lit, col
 from pyspark.sql.types import Row
+
+from py4j.protocol import Py4JJavaError
 
 # Import the required jars run the application
 jars = ",".join(feature_store_pyspark.classpath_jars())
