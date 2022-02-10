@@ -159,12 +159,12 @@ object InputDataSchemaValidator {
     // Verify all required feature names are present in schema.
     if (!recordIdMatch) {
       throw ValidationError(
-        s"Cannot proceed. Missing required record id '$recordIdentifierName' in schema."
+        s"Cannot proceed. Record identifier feature missing in DataFrame columns: '$recordIdentifierName'."
       )
     }
     if (!eventTimeMatch) {
       throw ValidationError(
-        s"Cannot proceed. Missing required event time '$eventTimeFeatureName' in schema." // TODO: hard code this error message?
+        s"Cannot proceed. Event time feature missing in DataFrame columns: '$eventTimeFeatureName'."
       )
     }
   }
