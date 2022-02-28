@@ -108,7 +108,7 @@ non_matching_df = identity_df.withColumn("ExtraColumn", lit("extraValue"))
 try:
     feature_store_manager.validate_data_frame_schema(
         input_data_frame=non_matching_df,
-        feature_group_arn=response.get("FeatureGorupArn")
+        feature_group_arn=response.get("FeatureGroupArn")
     )
 except Py4JJavaError as err:
     java_err = err.java_exception
