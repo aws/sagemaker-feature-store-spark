@@ -80,7 +80,7 @@ class FeatureStoreManager extends Serializable {
     val region                  = featureGroupArnResolver.resolveRegion()
 
     val describeResponse = getFeatureGroup(featureGroupName)
-    validateDataFrameSchemaWithDescription(inputDataFrame, featureGroupArn, describeResponse)
+    validateDataFrameSchemaWithFeatureGroup(inputDataFrame, featureGroupArn, describeResponse)
 
     checkDirectOfflineStore(describeResponse, directOfflineStore)
 
@@ -138,10 +138,10 @@ class FeatureStoreManager extends Serializable {
 
     val describeResponse = getFeatureGroup(featureGroupName)
 
-    validateDataFrameSchemaWithDescription(inputDataFrame, featureGroupArn, describeResponse)
+    validateDataFrameSchemaWithFeatureGroup(inputDataFrame, featureGroupArn, describeResponse)
   }
 
-  private def validateDataFrameSchemaWithDescription(
+  private def validateDataFrameSchemaWithFeatureGroup(
       inputDataFrame: DataFrame,
       featureGroupArn: String,
       featureGroupDescription: DescribeFeatureGroupResponse

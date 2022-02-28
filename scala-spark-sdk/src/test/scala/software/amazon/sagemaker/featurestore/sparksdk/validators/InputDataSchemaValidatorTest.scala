@@ -28,6 +28,17 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
   }
 
   @Test(
+    expectedExceptions = Array(classOf[ValidationError]),
+    expectedExceptionsMessageRegExp = "Cannot proceed. Event time feature missing in DataFrame columns: '.*'."
+  )
+  def validateNoEventtimeDataFrameFailWithMsg(): Unit = {
+    val response = buildTestDescribeFeatureGroupResponse()
+    val df = Seq(("identifier-1", "0.005", "test-feature", "100"))
+      .toDF("record-identifier", "feature-fractional", "feature-string", "feature-integral")
+    InputDataSchemaValidator.validateInputDataFrame(df, response)
+  }
+
+  @Test(
     dataProvider = "validateSchemaPositiveTestDataProvider"
   )
   def validateDataFrameTest_positive(testDataFrame: DataFrame): Unit = {

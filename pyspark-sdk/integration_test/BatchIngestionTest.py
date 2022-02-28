@@ -105,11 +105,22 @@ feature_store_manager.validate_data_frame_schema(
 
 # negative validation
 non_matching_df = identity_df.withColumn("ExtraColumn", lit("extraValue"))
-with tc.assertRaises(Py4JJavaError):
+try:
     feature_store_manager.validate_data_frame_schema(
         input_data_frame=non_matching_df,
         feature_group_arn=response.get("FeatureGorupArn")
     )
+except Py4JJavaError as err:
+    java_err = err.java_exception
+    tc.assertEqual(
+        java_err.getClass().getName(),
+        "software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError"
+    )
+    tc.assertEqual(
+        java_err.getMessage(),
+        "Cannot proceed. Schema contains unknown columns: 'ListBuffer(ExtraColumn)'"
+    )
+
 
 # offline store direct ingest
 feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_arn=response.get("FeatureGroupArn"),
