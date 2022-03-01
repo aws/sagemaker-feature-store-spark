@@ -24,7 +24,7 @@ import boto3
 import feature_store_pyspark
 from feature_store_pyspark.FeatureStoreManager import FeatureStoreManager
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import lit, col
+from pyspark.sql.functions import lit, col, date_format, current_timestamp
 from pyspark.sql.types import Row
 
 from py4j.protocol import Py4JJavaError
@@ -59,16 +59,6 @@ def clean_up(feature_group_name):
 
 atexit.register(clean_up, test_feature_group_name)
 
-feature_store_manager = FeatureStoreManager()
-
-# For testing purpose, we only get 1 record from dataset and persist it to feature store
-current_time = time.time()
-identity_df = spark.read.options(header='True', inferSchema='True').csv(csv_data).limit(20).cache()
-identity_df = identity_df.withColumn("EventTime", lit(current_time).cast("double"))
-
-feature_definitions = feature_store_manager.load_feature_definitions_from_schema(identity_df)
-
-
 def wait_for_feature_group_creation_complete(feature_group_name):
     status = sagemaker_client.describe_feature_group(FeatureGroupName=feature_group_name).get("FeatureGroupStatus")
     while status == "Creating":
@@ -79,23 +69,37 @@ def wait_for_feature_group_creation_complete(feature_group_name):
         raise RuntimeError(f"Failed to create feature group {feature_group_name}")
 
 
-response = sagemaker_client.create_feature_group(
-    FeatureGroupName=test_feature_group_name,
-    RecordIdentifierFeatureName='TransactionID',
-    EventTimeFeatureName='EventTime',
-    FeatureDefinitions=feature_definitions,
-    OnlineStoreConfig={
-        'EnableOnlineStore': True
-    },
-    OfflineStoreConfig={
-        'S3StorageConfig': {
-            'S3Uri': f's3://spark-test-bucket-{account_id}/test-offline-store'
-        }
-    },
-    RoleArn=f"arn:aws:iam::{account_id}:role/feature-store-role"
-)
+def create_feature_group_for_df(feature_store_manager, feature_group_name, data_frame):
+    feature_definitions = feature_store_manager.load_feature_definitions_from_schema(data_frame)
 
-wait_for_feature_group_creation_complete(test_feature_group_name)
+    response = sagemaker_client.create_feature_group(
+        FeatureGroupName=feature_group_name,
+        RecordIdentifierFeatureName='TransactionID',
+        EventTimeFeatureName='EventTime',
+        FeatureDefinitions=feature_definitions,
+        OnlineStoreConfig={
+            'EnableOnlineStore': True
+        },
+        OfflineStoreConfig={
+            'S3StorageConfig': {
+                'S3Uri': f's3://spark-test-bucket-{account_id}/test-offline-store'
+            }
+        },
+        RoleArn=f"arn:aws:iam::{account_id}:role/feature-store-role"
+    )
+
+    wait_for_feature_group_creation_complete(feature_group_name)
+    return response
+
+
+feature_store_manager = FeatureStoreManager()
+
+# For testing purpose, we only get 1 record from dataset and persist it to feature store
+current_time = time.time()
+identity_df_raw = spark.read.options(header='True', inferSchema='True').csv(csv_data).limit(20).cache()
+identity_df = identity_df_raw.withColumn("EventTime", lit(current_time).cast("double"))
+
+response = create_feature_group_for_df(feature_store_manager, test_feature_group_name, identity_df)
 
 # positive validation
 feature_store_manager.validate_data_frame_schema(
@@ -182,3 +186,14 @@ for row in identity_df.collect():
     verify_online_record(row, record)
 
 
+# tests online ingestion of string event time, in a timestamp format undocumented in the Feature Store document
+str_eventtime_feature_group_name = 'sagemaker-feature-store-spark-test-str-eventtime' + time.strftime("%d-%H-%M-%S", time.gmtime())
+current_date_str = date_format(current_timestamp(), "yyyy-MM-dd")
+identity_df_str_eventtime = identity_df_raw.withColumn("EventTime", lit(current_date_str))
+response_str_eventtime = create_feature_group_for_df(feature_store_manager, str_eventtime_feature_group_name, identity_df_str_eventtime)
+feature_store_manager.validate_data_frame_schema(
+    input_data_frame=identity_df_str_eventtime,
+    feature_group_arn=response_str_eventtime.get("FeatureGroupArn")
+)
+feature_store_manager.ingest_data(input_data_frame=identity_df_str_eventtime, feature_group_arn=response.get("FeatureGroupArn"),
+                                  direct_offline_store=False)
