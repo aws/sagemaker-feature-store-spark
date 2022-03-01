@@ -195,5 +195,5 @@ feature_store_manager.validate_data_frame_schema(
     input_data_frame=identity_df_str_eventtime,
     feature_group_arn=response_str_eventtime.get("FeatureGroupArn")
 )
-feature_store_manager.ingest_data(input_data_frame=identity_df_str_eventtime, feature_group_arn=response.get("FeatureGroupArn"),
+feature_store_manager.ingest_data(input_data_frame=identity_df_str_eventtime, feature_group_arn=response_str_eventtime.get("FeatureGroupArn"),
                                   direct_offline_store=False)
