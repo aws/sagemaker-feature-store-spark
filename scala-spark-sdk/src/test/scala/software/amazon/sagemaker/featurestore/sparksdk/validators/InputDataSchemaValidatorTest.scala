@@ -57,6 +57,89 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
     }
   }
 
+  @Test(
+    dataProvider = "validStrEventTimeProvider"
+  )
+  def validateStrEventTimeFormatTest_positive(testDataFrame: DataFrame): Unit = {
+    val response = buildTestDescribeFeatureGroupResponseStrEventtime()
+    InputDataSchemaValidator.validateInputDataFrame(testDataFrame, response)
+  }
+
+  @Test(
+    expectedExceptions = Array(classOf[ValidationError]),
+    dataProvider = "invalidStrEventTimeProvider"
+  )
+  def validateStrEventTimeFormatTest_negative(testDataFrame: DataFrame): Unit = {
+    val response = buildTestDescribeFeatureGroupResponseStrEventtime()
+    InputDataSchemaValidator.validateInputDataFrame(testDataFrame, response)
+  }
+
+  @DataProvider
+  def validStrEventTimeProvider(): Array[Array[Any]] = {
+    Array(
+      Array(
+        Seq(("identifier-1", "2022-02-15T00:03:30+0000"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-02-15T00:03:30.932+0000"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-02-15T00:03:30.932-0800"))
+          .toDF("record-identifier", "event-time")
+      )
+    )
+  }
+
+  @DataProvider
+  def invalidStrEventTimeProvider(): Array[Array[Any]] = {
+    Array(
+      // time malformat
+      Array(
+        Seq(("identifier-1", "2022-02-15T00:03:30Z"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-02-15T00:03:30-08:00"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-02-15T00:03:30-08"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-02-15T00:03:30"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-02-15T00:03:30.931"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-02-15 00:03:30+0000"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022/02/15T00:03:30+0000"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-02-15"))
+          .toDF("record-identifier", "event-time")
+      ),
+      // time out of range
+      Array(
+        Seq(("identifier-1", "2022-02-15T25:03:30.932-0800"))
+          .toDF("record-identifier", "event-time")
+      ),
+      Array(
+        Seq(("identifier-1", "2022-22-15T05:03:30.932-0800"))
+          .toDF("record-identifier", "event-time")
+      )
+    )
+  }
+
   @DataProvider
   def validateSchemaNegativeTestDataProvider(): Array[Array[Any]] = {
     Array(
@@ -157,6 +240,26 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
           .builder()
           .featureName("feature-fractional")
           .featureType(FeatureType.FRACTIONAL)
+          .build()
+      )
+      .build()
+  }
+
+  def buildTestDescribeFeatureGroupResponseStrEventtime(): DescribeFeatureGroupResponse = {
+    DescribeFeatureGroupResponse
+      .builder()
+      .recordIdentifierFeatureName("record-identifier")
+      .eventTimeFeatureName("event-time")
+      .featureDefinitions(
+        FeatureDefinition
+          .builder()
+          .featureName("record-identifier")
+          .featureType(FeatureType.STRING)
+          .build(),
+        FeatureDefinition
+          .builder()
+          .featureName("event-time")
+          .featureType(FeatureType.STRING)
           .build()
       )
       .build()

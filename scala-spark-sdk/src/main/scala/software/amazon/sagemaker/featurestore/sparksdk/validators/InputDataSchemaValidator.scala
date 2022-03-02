@@ -16,7 +16,7 @@
 
 package software.amazon.sagemaker.featurestore.sparksdk.validators
 
-import org.apache.spark.sql.functions.{col, concat_ws, lit, when}
+import org.apache.spark.sql.functions.{col, concat_ws, lit, when, to_timestamp, coalesce}
 import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.sql.{Column, DataFrame}
 import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureDefinition}
@@ -169,6 +169,14 @@ object InputDataSchemaValidator {
     }
   }
 
+  private def checkTimestampFormat(featureName: String, sparkType: String): Column = {
+    val formats = Seq("yyyy", "yyyy-MM-dd'T'HH:mm:ssZ")
+    coalesce(
+      to_timestamp(col(featureName).cast(sparkType), "yyyy-MM-dd'T'HH:mm:ss.SSSZ"),
+      to_timestamp(col(featureName).cast(sparkType), "yyyy-MM-dd'T'HH:mm:ssZ")
+    )
+  }
+
   private def getSchemaDataTypeValidatorMap(
       dataFrame: DataFrame,
       featureDefinitions: List[FeatureDefinition],
@@ -182,9 +190,15 @@ object InputDataSchemaValidator {
           val featureName = featureDefinition.featureName()
           val sparkType   = TYPE_MAP(featureDefinition.featureTypeAsString())
           if (featureName.equals(eventTimeFeatureName)) {
-            resultMap + (eventTimeFeatureName -> ((featureName: String) =>
-              col(featureName).cast(sparkType).cast(TimestampType)
-            ))
+            if (sparkType.equals("string")) {
+              resultMap + (eventTimeFeatureName -> ((featureName: String) =>
+                checkTimestampFormat(featureName, sparkType)
+              ))
+            } else {
+              resultMap + (eventTimeFeatureName -> ((featureName: String) =>
+                col(featureName).cast(sparkType).cast(TimestampType)
+              ))
+            }
           } else if (dataFrame.schema.names.contains(featureName)) {
             resultMap + (featureName -> lambdaCreator(sparkType))
           } else {

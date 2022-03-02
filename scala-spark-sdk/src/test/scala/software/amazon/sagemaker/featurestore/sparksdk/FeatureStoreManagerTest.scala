@@ -269,7 +269,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
   def ingestDataTestDataProvider(): Array[Array[Any]] = {
     Array(
       Array(
-        Seq(("identifier-1", "2021-05-06T05:12:14Z"))
+        Seq(("identifier-1", "2021-05-06T05:12:14-0800"))
           .toDF("record-identifier", "event-time"),
         PutRecordRequest
           .builder()
@@ -283,7 +283,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
             FeatureValue
               .builder()
               .featureName("event-time")
-              .valueAsString("2021-05-06T05:12:14Z")
+              .valueAsString("2021-05-06T05:12:14-0800")
               .build()
           )
           .build()
