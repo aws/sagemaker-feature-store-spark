@@ -184,3 +184,22 @@ for row in identity_df.collect():
     )
     record = get_record_response["Record"]
     verify_online_record(row, record)
+
+# tests online ingestion of string event time, in a timestamp format undocumented in the Feature Store document
+str_eventtime_feature_group_name = 'sagemaker-feature-store-spark-test-str-eventtime' + time.strftime("%d-%H-%M-%S", time.gmtime())
+current_date_str = date_format(current_timestamp(), "yyyy-MM-dd'T'HH:mm:ssZ")
+identity_df_str_eventtime = identity_df_raw.withColumn("EventTime", lit(current_date_str))
+response_str_eventtime = create_feature_group_for_df(feature_store_manager, str_eventtime_feature_group_name, identity_df_str_eventtime)
+feature_store_manager.validate_data_frame_schema(
+    input_data_frame=identity_df_str_eventtime,
+    feature_group_arn=response_str_eventtime.get("FeatureGroupArn")
+)
+feature_store_manager.ingest_data(input_data_frame=identity_df_str_eventtime, feature_group_arn=response_str_eventtime.get("FeatureGroupArn"),
+                                  direct_offline_store=False)
+for row in identity_df_str_eventtime.collect():
+    get_record_response = featurestore_runtime.get_record(
+        FeatureGroupName=str_eventtime_feature_group_name,
+        RecordIdentifierValueAsString=str(row["TransactionID"]),
+    )
+    record = get_record_response["Record"]
+    verify_online_record(row, record)
