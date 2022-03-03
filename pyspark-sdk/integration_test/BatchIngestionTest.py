@@ -187,8 +187,8 @@ for row in identity_df.collect():
 
 # tests online ingestion of string event time, in a timestamp format undocumented in the Feature Store document
 str_eventtime_feature_group_name = 'sagemaker-feature-store-spark-test-str-eventtime' + time.strftime("%d-%H-%M-%S", time.gmtime())
-current_date_str = date_format(current_timestamp(), "yyyy-MM-dd'T'HH:mm:ssZ")
-identity_df_str_eventtime = identity_df_raw.withColumn("EventTime", lit("2022-02-15T00:03:30.932-0800"))
+current_date_str = date_format(current_timestamp(), "yyyy-MM-dd'T'HH:mm:ss'Z'")
+identity_df_str_eventtime = identity_df_raw.withColumn("EventTime", lit("2022-02-15T00:03:30.932Z"))
 response_str_eventtime = create_feature_group_for_df(feature_store_manager, str_eventtime_feature_group_name, identity_df_str_eventtime)
 feature_store_manager.validate_data_frame_schema(
     input_data_frame=identity_df_str_eventtime,

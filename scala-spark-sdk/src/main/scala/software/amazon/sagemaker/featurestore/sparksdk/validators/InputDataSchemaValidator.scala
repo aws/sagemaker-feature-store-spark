@@ -170,10 +170,9 @@ object InputDataSchemaValidator {
   }
 
   private def checkTimestampFormat(featureName: String, sparkType: String): Column = {
-    val formats = Seq("yyyy", "yyyy-MM-dd'T'HH:mm:ssZ")
     coalesce(
-      to_timestamp(col(featureName).cast(sparkType), "yyyy-MM-dd'T'HH:mm:ss.SSSZ"),
-      to_timestamp(col(featureName).cast(sparkType), "yyyy-MM-dd'T'HH:mm:ssZ")
+      to_timestamp(col(featureName).cast(sparkType), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"),
+      to_timestamp(col(featureName).cast(sparkType), "yyyy-MM-dd'T'HH:mm:ss'Z'")
     )
   }
 

@@ -78,15 +78,11 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
   def validStrEventTimeProvider(): Array[Array[Any]] = {
     Array(
       Array(
-        Seq(("identifier-1", "2022-02-15T00:03:30+0000"))
+        Seq(("identifier-1", "2022-02-15T00:03:30Z"))
           .toDF("record-identifier", "event-time")
       ),
       Array(
-        Seq(("identifier-1", "2022-02-15T00:03:30.932+0000"))
-          .toDF("record-identifier", "event-time")
-      ),
-      Array(
-        Seq(("identifier-1", "2022-02-15T00:03:30.932-0800"))
+        Seq(("identifier-1", "2022-02-15T00:03:30.932Z"))
           .toDF("record-identifier", "event-time")
       )
     )
@@ -97,7 +93,7 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
     Array(
       // time malformat
       Array(
-        Seq(("identifier-1", "2022-02-15T00:03:30Z"))
+        Seq(("identifier-1", "2022-02-15T00:03:30+0000"))
           .toDF("record-identifier", "event-time")
       ),
       Array(
@@ -117,11 +113,11 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
           .toDF("record-identifier", "event-time")
       ),
       Array(
-        Seq(("identifier-1", "2022-02-15 00:03:30+0000"))
+        Seq(("identifier-1", "2022-02-15 00:03:30Z"))
           .toDF("record-identifier", "event-time")
       ),
       Array(
-        Seq(("identifier-1", "2022/02/15T00:03:30+0000"))
+        Seq(("identifier-1", "2022/02/15T00:03:30Z"))
           .toDF("record-identifier", "event-time")
       ),
       Array(
@@ -130,11 +126,11 @@ class InputDataSchemaValidatorTest extends TestNGSuite {
       ),
       // time out of range
       Array(
-        Seq(("identifier-1", "2022-02-15T25:03:30.932-0800"))
+        Seq(("identifier-1", "2022-02-15T25:03:30.932Z"))
           .toDF("record-identifier", "event-time")
       ),
       Array(
-        Seq(("identifier-1", "2022-22-15T05:03:30.932-0800"))
+        Seq(("identifier-1", "2022-22-15T05:03:30.932Z"))
           .toDF("record-identifier", "event-time")
       )
     )
