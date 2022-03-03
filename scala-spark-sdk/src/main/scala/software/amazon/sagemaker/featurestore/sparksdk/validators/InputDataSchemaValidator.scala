@@ -16,7 +16,7 @@
 
 package software.amazon.sagemaker.featurestore.sparksdk.validators
 
-import org.apache.spark.sql.functions.{col, concat_ws, lit, when}
+import org.apache.spark.sql.functions.{col, concat_ws, lit, when, to_timestamp, coalesce}
 import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.sql.{Column, DataFrame}
 import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureDefinition}
@@ -44,7 +44,7 @@ object InputDataSchemaValidator {
   def validateInputDataFrame(
       dataFrame: DataFrame,
       describeResponse: DescribeFeatureGroupResponse
-  ): DataFrame = {
+  ): Unit = {
     val recordIdentifierName = describeResponse.recordIdentifierFeatureName()
     val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
 
@@ -89,7 +89,15 @@ object InputDataSchemaValidator {
           "or records values equal to NaN."
       )
     }
+  }
 
+  def transformDataFrameType(dataFrame: DataFrame, describeResponse: DescribeFeatureGroupResponse): DataFrame = {
+    val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
+    val schemaDataTypeValidatorMap = getSchemaDataTypeValidatorMap(
+      dataFrame = dataFrame,
+      featureDefinitions = describeResponse.featureDefinitions().asScala.toList,
+      describeResponse.eventTimeFeatureName()
+    )
     val dataTypeTransformationMap = getSchemaDataTypeTransformationMap(
       schemaDataTypeValidatorMap,
       describeResponse.featureDefinitions().asScala.toList,
@@ -107,10 +115,11 @@ object InputDataSchemaValidator {
       recordIdentifierName: String,
       eventTimeFeatureName: String
   ): Unit = {
-    val invalidCharSet              = "[,;{}()\n\t=]"
-    val invalidCharSetPattern       = Pattern.compile(invalidCharSet)
-    val unknown_columns             = ListBuffer[String]()
-    var missingRequiredFeatureNames = Set(recordIdentifierName, eventTimeFeatureName)
+    val invalidCharSet        = "[,;{}()\n\t=]"
+    val invalidCharSetPattern = Pattern.compile(invalidCharSet)
+    val unknown_columns       = ListBuffer[String]()
+    var recordIdMatch         = false
+    var eventTimeMatch        = false
 
     for (name <- schemaNames) {
       // Verify there are no invalid characters ",;{}()\n\t=" in the schema names.
@@ -131,8 +140,12 @@ object InputDataSchemaValidator {
         unknown_columns += name
       }
 
-      if (missingRequiredFeatureNames.contains(name)) {
-        missingRequiredFeatureNames -= name
+      if (name == recordIdentifierName) {
+        recordIdMatch = true
+      }
+
+      if (name == eventTimeFeatureName) {
+        eventTimeMatch = true
       }
     }
 
@@ -144,11 +157,23 @@ object InputDataSchemaValidator {
     }
 
     // Verify all required feature names are present in schema.
-    if (missingRequiredFeatureNames.nonEmpty) {
+    if (!recordIdMatch) {
       throw ValidationError(
-        s"Cannot proceed. Missing feature names '$missingRequiredFeatureNames' in schema."
+        s"Cannot proceed. Record identifier feature missing in DataFrame columns: '$recordIdentifierName'."
       )
     }
+    if (!eventTimeMatch) {
+      throw ValidationError(
+        s"Cannot proceed. Event time feature missing in DataFrame columns: '$eventTimeFeatureName'."
+      )
+    }
+  }
+
+  private def checkTimestampFormat(featureName: String, sparkType: String): Column = {
+    coalesce(
+      to_timestamp(col(featureName).cast(sparkType), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"),
+      to_timestamp(col(featureName).cast(sparkType), "yyyy-MM-dd'T'HH:mm:ss'Z'")
+    )
   }
 
   private def getSchemaDataTypeValidatorMap(
@@ -164,9 +189,15 @@ object InputDataSchemaValidator {
           val featureName = featureDefinition.featureName()
           val sparkType   = TYPE_MAP(featureDefinition.featureTypeAsString())
           if (featureName.equals(eventTimeFeatureName)) {
-            resultMap + (eventTimeFeatureName -> ((featureName: String) =>
-              col(featureName).cast(sparkType).cast(TimestampType)
-            ))
+            if (sparkType.equals("string")) {
+              resultMap + (eventTimeFeatureName -> ((featureName: String) =>
+                checkTimestampFormat(featureName, sparkType)
+              ))
+            } else {
+              resultMap + (eventTimeFeatureName -> ((featureName: String) =>
+                col(featureName).cast(sparkType).cast(TimestampType)
+              ))
+            }
           } else if (dataFrame.schema.names.contains(featureName)) {
             resultMap + (featureName -> lambdaCreator(sparkType))
           } else {

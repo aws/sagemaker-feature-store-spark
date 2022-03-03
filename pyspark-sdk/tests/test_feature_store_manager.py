@@ -53,3 +53,20 @@ def test_load_feature_definitions_from_schema():
             'FeatureType': 'String'
         },
     ]
+
+
+def test_validate_data_frame_schema():
+    data = [(123, 123.0, "dummy")]
+    schema = StructType([
+        StructField("feature-integral", LongType()),
+        StructField("feature-fractional", DoubleType()),
+        StructField("feature-string", StringType()),
+    ])
+    df = spark.createDataFrame(data, schema)
+
+    feature_store_manager = FeatureStoreManager()
+
+    with patch('pyspark.ml.wrapper.JavaWrapper._call_java') as java_method_invocation:
+        feature_store_manager.validate_data_frame_schema(df, "test-arn")
+        # Assert call _call_java method of the wrapper with all parameters passed correctly
+        java_method_invocation.assert_called_with("validateDataFrameSchema", df, "test-arn")

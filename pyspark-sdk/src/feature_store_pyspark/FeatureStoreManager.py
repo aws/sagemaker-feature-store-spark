@@ -52,3 +52,13 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
             "FeatureName": definition.featureName(),
             "FeatureType": definition.featureType().toString()
         }, java_feature_definitions))
+
+    def validate_data_frame_schema(self, input_data_frame: DataFrame, feature_group_arn: string):
+        """
+        Validate data against SageMaker Feature Group schema.
+        Throws py4j.protocol.Py4JJavaError in case of validation failure.
+        :param input_data_frame: input Spark DataFrame to be validated
+        :param feature_group_arn: feature group arn
+        :return:
+        """
+        return self._call_java("validateDataFrameSchema", input_data_frame, feature_group_arn)

@@ -36,6 +36,7 @@ import software.amazon.sagemaker.featurestore.sparksdk.helpers.ClientFactory
 
 import java.io.File
 import scala.reflect.io.Directory
+import scala.Double.NaN
 
 class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
 
@@ -231,6 +232,39 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
     featureStoreManager.loadFeatureDefinitionsFromSchema(inputDataFrame)
   }
 
+  @Test(
+    expectedExceptions = Array(classOf[ValidationError]),
+    dataProvider = "validateSchemaNegativeTestDataProvider"
+  )
+  def validateDataFrameSchemaTest_negative(
+      inputDataFrame: DataFrame,
+      feature_group_arn: String,
+      feature_group_status: FeatureGroupStatus
+  ) {
+    val response = buildTestDescribeFeatureGroupResponse(feature_group_arn, feature_group_status)
+
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+
+    featureStoreManager.validateDataFrameSchema(
+      inputDataFrame,
+      TEST_FEATURE_GROUP_ARN
+    )
+  }
+
+  @Test(
+    dataProvider = "validateSchemaPositiveTestDataProvider"
+  )
+  def validateDataFrameSchemaTest_positive(inputDataFrame: DataFrame) {
+    val response = buildTestDescribeFeatureGroupResponse(TEST_FEATURE_GROUP_ARN, FeatureGroupStatus.CREATED)
+
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+
+    featureStoreManager.validateDataFrameSchema(
+      inputDataFrame,
+      TEST_FEATURE_GROUP_ARN
+    )
+  }
+
   @DataProvider
   def ingestDataTestDataProvider(): Array[Array[Any]] = {
     Array(
@@ -280,6 +314,127 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
           .toDF("feature-integral", "feature-fractional", "feature-boolean")
       )
     )
+  }
+
+  @DataProvider
+  def validateSchemaNegativeTestDataProvider(): Array[Array[Any]] = {
+    Array(
+      // Column names contain invalid char
+      Array(Seq(("identifier")).toDF("{record-identifier}"), TEST_FEATURE_GROUP_ARN, FeatureGroupStatus.CREATED),
+      // Columns contain unknow feature
+      Array(Seq(("feature")).toDF("feature-unknown"), TEST_FEATURE_GROUP_ARN, FeatureGroupStatus.CREATED),
+      // Missing required feature name in the data frame
+      Array(Seq(("identifier-1")).toDF("record-identifier"), TEST_FEATURE_GROUP_ARN, FeatureGroupStatus.CREATED),
+      Array(Seq(("1631091971")).toDF("event-time"), TEST_FEATURE_GROUP_ARN, FeatureGroupStatus.CREATED),
+      // Columns contain reserved feature names
+      Array(
+        Seq(("identifier-1", "1631091971", "true"))
+          .toDF("record-identifier", "event-time", "is_deleted"),
+        TEST_FEATURE_GROUP_ARN,
+        FeatureGroupStatus.CREATED
+      ),
+      // Invalid feature values
+      Array(
+        Seq(("identifier-1", "invalid-event-time"))
+          .toDF("record-identifier", "event-time"),
+        TEST_FEATURE_GROUP_ARN,
+        FeatureGroupStatus.CREATED
+      ),
+      Array(
+        Seq(("identifier-1", "1631091971", "invalid-integral"))
+          .toDF("record-identifier", "event-time", "feature-integral"),
+        TEST_FEATURE_GROUP_ARN,
+        FeatureGroupStatus.CREATED
+      ),
+      Array(
+        Seq(("identifier-1", "1631091971", "invalid-fractional"))
+          .toDF("record-identifier", "event-time", "feature-fractional"),
+        TEST_FEATURE_GROUP_ARN,
+        FeatureGroupStatus.CREATED
+      ),
+      Array(
+        Seq(("identifier-1", NaN))
+          .toDF("record-identifier", "event-time"),
+        TEST_FEATURE_GROUP_ARN,
+        FeatureGroupStatus.CREATED
+      ),
+      Array(
+        Seq((null, "1631091971"))
+          .toDF("record-identifier", "event-time"),
+        TEST_FEATURE_GROUP_ARN,
+        FeatureGroupStatus.CREATED
+      ),
+      Array(
+        Seq(("identifier-1", null))
+          .toDF("record-identifier", "event-time"),
+        TEST_FEATURE_GROUP_ARN,
+        FeatureGroupStatus.CREATED
+      ),
+      // Feature group ARN not matching
+      Array(
+        Seq(("identifier-1", "1631091971", "0.005", "test-feature", "100"))
+          .toDF("record-identifier", "event-time", "feature-fractional", "feature-string", "feature-integral"),
+        "random-feature-group-arn",
+        FeatureGroupStatus.CREATED
+      ),
+      // Feature group is not successfully created
+      Array(
+        Seq(("identifier-1", "1631091971", "0.005", "test-feature", "100"))
+          .toDF("record-identifier", "event-time", "feature-fractional", "feature-string", "feature-integral"),
+        TEST_FEATURE_GROUP_ARN,
+        FeatureGroupStatus.CREATING
+      )
+    )
+  }
+
+  @DataProvider
+  def validateSchemaPositiveTestDataProvider(): Array[Array[Any]] = {
+    Array(
+      Array(
+        Seq(("identifier-1", "1631091971", "0.005", "test-feature", "100"))
+          .toDF("record-identifier", "event-time", "feature-fractional", "feature-string", "feature-integral")
+      )
+    )
+  }
+
+  def buildTestDescribeFeatureGroupResponse(
+      feature_group_arn: String,
+      feature_group_status: FeatureGroupStatus
+  ): DescribeFeatureGroupResponse = {
+    DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupArn(feature_group_arn)
+      .featureGroupStatus(feature_group_status)
+      .recordIdentifierFeatureName("record-identifier")
+      .eventTimeFeatureName("event-time")
+      .featureDefinitions(
+        FeatureDefinition
+          .builder()
+          .featureName("record-identifier")
+          .featureType(FeatureType.STRING)
+          .build(),
+        FeatureDefinition
+          .builder()
+          .featureName("event-time")
+          .featureType(FeatureType.FRACTIONAL)
+          .build(),
+        FeatureDefinition
+          .builder()
+          .featureName("feature-string")
+          .featureType(FeatureType.STRING)
+          .build(),
+        FeatureDefinition
+          .builder()
+          .featureName("feature-integral")
+          .featureType(FeatureType.INTEGRAL)
+          .build(),
+        FeatureDefinition
+          .builder()
+          .featureName("feature-fractional")
+          .featureType(FeatureType.FRACTIONAL)
+          .build()
+      )
+      .build()
   }
 
   def verifyDataIngestedInOfflineStore(
