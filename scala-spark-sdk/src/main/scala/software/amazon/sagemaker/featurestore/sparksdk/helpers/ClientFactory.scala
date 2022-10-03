@@ -20,70 +20,117 @@ import com.google.common.annotations.VisibleForTesting
 import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration
 import software.amazon.awssdk.core.retry.RetryPolicy
 import software.amazon.awssdk.http.apache.ApacheHttpClient
+import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.sagemaker.SageMakerClient
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.{
   SageMakerFeatureStoreRuntimeClient,
   SageMakerFeatureStoreRuntimeClientBuilder
 }
+import software.amazon.awssdk.services.sts.StsClient
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
+import software.amazon.awssdk.services.sts.model.AssumeRoleRequest
+
+import java.util.UUID
 
 /** This factory provides the default client and configurations.
  */
 object ClientFactory {
 
-  private final val DEFAULT_MAX_NUMBER_RETRIES  = 10
-  private var _sageMakerClient: SageMakerClient = getDefaultSageMakerClient
-  private var _sageMakerFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder =
-    getDefaultFeatureStoreRuntimeClientBuilder
+  private final val DEFAULT_MAX_NUMBER_RETRIES                                                              = 10
+  private var _assumeRoleArn: Option[String]                                                                = None
+  private var _region: Option[String]                                                                       = None
+  private var _stsAssumeRoleCredentialsProvider: Option[StsAssumeRoleCredentialsProvider]                   = None
+  private var _sageMakerClient: Option[SageMakerClient]                                                     = None
+  private var _sageMakerFeatureStoreRuntimeClientBuilder: Option[SageMakerFeatureStoreRuntimeClientBuilder] = None
 
   // Getters
-  def sageMakerClient: SageMakerClient = _sageMakerClient
+  def sageMakerClient: SageMakerClient = _sageMakerClient.orNull
   def sageMakerFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder =
-    _sageMakerFeatureStoreRuntimeClientBuilder
+    _sageMakerFeatureStoreRuntimeClientBuilder.orNull
+  def assumeRoleArn: String                                              = _assumeRoleArn.orNull
+  def region: String                                                     = _region.orNull
+  def stsAssumeRoleCredentialsProvider: StsAssumeRoleCredentialsProvider = _stsAssumeRoleCredentialsProvider.orNull
 
   // Setters
   @VisibleForTesting
-  def sageMakerClient_=(client: SageMakerClient): Unit = _sageMakerClient = client
+  def sageMakerClient_=(client: SageMakerClient): Unit = _sageMakerClient = Option(client)
   @VisibleForTesting
   def sageMakerFeatureStoreRuntimeClientBuilder_=(
       runtimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder
-  ): Unit = _sageMakerFeatureStoreRuntimeClientBuilder = runtimeClientBuilder
+  ): Unit = _sageMakerFeatureStoreRuntimeClientBuilder = Option(runtimeClientBuilder)
+  @VisibleForTesting
+  def assumeRoleArn_=(roleArn: String): Unit = _assumeRoleArn = Option(roleArn)
+  @VisibleForTesting
+  def region_=(region: String): Unit = _region = Option(region)
+  @VisibleForTesting
+  def stsAssumeRoleCredentialsProvider_=(credentialsProvider: StsAssumeRoleCredentialsProvider): Unit =
+    _stsAssumeRoleCredentialsProvider = Option(credentialsProvider)
 
-  /** Genereate default SageMakerClient
+  /** Initialize the client factory
    *
-   *  @return
-   *    sagemaker client
+   *  @param roleArn
+   *    Initialize the client factory with provided role arn
+   *  @param region
+   *    Initialize the client factory with provided region, region should be the same as what provided in feature group
+   *    arn
    */
-  def getDefaultSageMakerClient: SageMakerClient = {
-    SageMakerClient
-      .builder()
-      .httpClient(ApacheHttpClient.builder().build())
-      .build()
+  def initialize(region: String, roleArn: String = null): Unit = {
+    this.assumeRoleArn = roleArn
+    this.region = region
+    this.stsAssumeRoleCredentialsProvider = getStsAssumeRoleCredentialsProvider
+    this.sageMakerClient = getDefaultSageMakerClient
+    this.sageMakerFeatureStoreRuntimeClientBuilder = getDefaultFeatureStoreRuntimeClientBuilder
   }
 
-  /** Genereate default feature store runtime client
-   *
-   *  @return
-   *    feature store runtime client
-   */
-  def getDefaultFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder = {
-    SageMakerFeatureStoreRuntimeClient
+  private def getDefaultSageMakerClient: SageMakerClient = {
+    val sageMakerClientBuilder = SageMakerClient
       .builder()
+      .region(Region.of(region))
       .httpClient(ApacheHttpClient.builder().build())
-      .overrideConfiguration(
-        ClientOverrideConfiguration
-          .builder()
-          .retryPolicy(getDefaultFeatureStoreRuntimeRetryPolicy)
-          .build()
-      )
+
+    if (_assumeRoleArn.nonEmpty) {
+      sageMakerClientBuilder.credentialsProvider(stsAssumeRoleCredentialsProvider)
+    }
+
+    sageMakerClientBuilder.build()
   }
 
-  /** Genereate default feature store runtime retry policy
-   *
-   *  @return
-   *    feature store runtime retry policy
-   */
-  def getDefaultFeatureStoreRuntimeRetryPolicy: RetryPolicy = {
+  private def getDefaultFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder = {
+    val sageMakerFeatureStoreRuntimeClient =
+      SageMakerFeatureStoreRuntimeClient
+        .builder()
+        .region(Region.of(region))
+        .httpClient(ApacheHttpClient.builder().build())
+        .overrideConfiguration(
+          ClientOverrideConfiguration
+            .builder()
+            .retryPolicy(getDefaultFeatureStoreRuntimeRetryPolicy)
+            .build()
+        )
+
+    if (_assumeRoleArn.nonEmpty) {
+      sageMakerFeatureStoreRuntimeClient.credentialsProvider(stsAssumeRoleCredentialsProvider)
+    }
+
+    sageMakerFeatureStoreRuntimeClient
+  }
+
+  private def getDefaultFeatureStoreRuntimeRetryPolicy: RetryPolicy = {
     RetryPolicy.builder().numRetries(DEFAULT_MAX_NUMBER_RETRIES).build()
   }
 
+  private def getStsAssumeRoleCredentialsProvider: StsAssumeRoleCredentialsProvider = {
+    if (_assumeRoleArn.isEmpty) {
+      return null
+    }
+
+    val assumeRoleRequest = AssumeRoleRequest
+      .builder()
+      .roleSessionName("feature-store-spark-" + UUID.randomUUID())
+      .roleArn(assumeRoleArn)
+      .build()
+    val stsClient = StsClient.builder().httpClient(ApacheHttpClient.builder().build()).region(Region.of(region)).build()
+
+    StsAssumeRoleCredentialsProvider.builder.stsClient(stsClient).refreshRequest(assumeRoleRequest).build()
+  }
 }

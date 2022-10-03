@@ -17,7 +17,10 @@
 package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
 import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureGroupStatus}
+import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.TargetStore
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
+
+import scala.collection.mutable.ListBuffer
 
 object FeatureGroupHelper {
 
@@ -31,24 +34,7 @@ object FeatureGroupHelper {
       throw ValidationError(
         s"Feature group '${describeResponse.featureGroupName()}' is in " +
           s"'${describeResponse.featureGroupStatus()}' status, " +
-          s"however status must be in 'Created' instead"
-      )
-    }
-  }
-
-  /** Check if feature group arn fetched from DescribeFeatureGroupResponse is the same as what customer provides.
-   *
-   *  @param describeResponse
-   *    response of DescribeFeatureGroup.
-   */
-  def checkIfFeatureGroupArnIdentical(
-      describeResponse: DescribeFeatureGroupResponse,
-      providedFeatureGroupArn: String
-  ): Unit = {
-    if (describeResponse.featureGroupArn() != providedFeatureGroupArn) {
-      throw ValidationError(
-        s"Provided feature group arn does not match the arn detected." +
-          s" For now cross account or region ingestion is not supported."
+          s"however status must be in 'Created' instead."
       )
     }
   }
@@ -58,15 +44,60 @@ object FeatureGroupHelper {
    *  @param describeResponse
    *    response of DescribeFeatureGroup.
    */
-  def checkDirectOfflineStore(
+  def checkAndParseTargetStore(
       describeResponse: DescribeFeatureGroupResponse,
-      directOfflineStore: Boolean
-  ): Unit = {
-    if (!isFeatureGroupOfflineStoreEnabled(describeResponse) && directOfflineStore) {
+      targetStores: List[String]
+  ): List[TargetStore] = {
+
+    // Skip the check if target store is null, then use default approach for ingestion based on
+    // the configuration of feature group
+
+    if (targetStores == null) {
+      return null
+    }
+
+    val parsedStores = targetStores
+      .map(store =>
+        if (TargetStore.fromValue(store) == null) TargetStore.UNKNOWN_TO_SDK_VERSION
+        else TargetStore.fromValue(store)
+      )
+      .toSet
+
+    if (parsedStores.contains(TargetStore.UNKNOWN_TO_SDK_VERSION)) {
       throw ValidationError(
-        s"OfflineStore of FeatureGroup: '${describeResponse.featureGroupName()}' is not enabled, however directOfflineStore is set to 'true'."
+        s"Found unknown target store, the valid values are [${TargetStore.knownValues().toArray.mkString(", ")}]."
       )
     }
+
+    if (parsedStores.size != targetStores.size) {
+      throw ValidationError(s"Found duplicate target store, please remove duplicate value and try again.")
+    }
+
+    if (parsedStores.isEmpty) {
+      throw ValidationError(
+        "Target stores cannot be empty, please provide at least one target store or leave it unspecified."
+      )
+    }
+
+    val invalidTargetStoresList = new ListBuffer[TargetStore]()
+
+    // Online store is specified as target store however online store is not enabled
+    if (parsedStores.contains(TargetStore.ONLINE_STORE) && !isFeatureGroupOnlineStoreEnabled(describeResponse)) {
+      invalidTargetStoresList += TargetStore.ONLINE_STORE
+    }
+
+    // Offline store is specified as target store however offline store is not enabled
+    if (parsedStores.contains(TargetStore.OFFLINE_STORE) && !isFeatureGroupOfflineStoreEnabled(describeResponse)) {
+      invalidTargetStoresList += TargetStore.OFFLINE_STORE
+    }
+
+    if (invalidTargetStoresList.nonEmpty) {
+      throw ValidationError(
+        s"[${invalidTargetStoresList.mkString(",")}] of FeatureGroup: '${describeResponse.featureGroupName()}' are not enabled, however they are specified in target store."
+      )
+    }
+
+    parsedStores.toList
   }
 
   /** Check if FeatureGruop has OnlineStore enabled.
@@ -109,5 +140,26 @@ object FeatureGroupHelper {
       .resolvedOutputS3Uri()
 
     resolvedOutputS3Uri.replaceFirst("s3", "s3a")
+  }
+
+  /** Get target stores from configuration of feature group
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   *  @return
+   *    target stores
+   */
+  def retrieveTargetStoresFromFeatureGroup(describeResponse: DescribeFeatureGroupResponse): List[TargetStore] = {
+    val targetStores = new ListBuffer[TargetStore]();
+
+    if (isFeatureGroupOnlineStoreEnabled(describeResponse)) {
+      targetStores += TargetStore.ONLINE_STORE
+    }
+
+    if (isFeatureGroupOfflineStoreEnabled(describeResponse)) {
+      targetStores += TargetStore.OFFLINE_STORE
+    }
+
+    targetStores.toList
   }
 }

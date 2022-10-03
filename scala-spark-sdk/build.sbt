@@ -14,40 +14,56 @@ scmInfo := Some(
 )
 licenses := Seq("Apache License, Version 2.0" -> url("https://aws.amazon.com/apache2.0"))
 
-lazy val SageMakerFeatureStoreSpark = (project in file("."))
-val sparkVersion = System.getProperty("SPARK_VERSION", "3.1.2")
+// change the output path of assembly jar
+lazy val SageMakerFeatureStoreSpark = (project in file(".")).settings(
+  assembly / assemblyOutputPath := file(s"./assembly-output/${(assembly/assemblyJarName).value}")
+)
+
+val sparkVersion = System.getProperty("SPARK_VERSION", "3.2.0")
+val majorSparkVersion = sparkVersion.substring(0, sparkVersion.lastIndexOf("."))
+
+val awsSDKVersion = "2.17.+"
+
+// read the version number
 version := {
- val base = baseDirectory.in(SageMakerFeatureStoreSpark).value
- IO.read(base / ".." / "VERSION").trim
+  val base = (SageMakerFeatureStoreSpark / baseDirectory).value
+  IO.read(base / ".." / "VERSION").trim
 }
 
 scalaVersion := "2.12.8"
 
 libraryDependencies ++= Seq(
-  "org.apache.hadoop" % "hadoop-aws" % "3.1.4",
-  "org.apache.hadoop" % "hadoop-common" % "3.1.4",
-  "software.amazon.awssdk" % "sagemaker" % "2.17.48",
-  "software.amazon.awssdk" % "sagemakerfeaturestoreruntime" % "2.16.32",
+  // SDK v2 is required by iceberg and spark connector. Since some platfomrs do not provide these dependencies, we
+  // pack them up and provide for users
+  //  "software.amazon.awssdk" % "sagemaker" % awsSDKVersion,
+  //  "software.amazon.awssdk" % "sagemakerfeaturestoreruntime" % awsSDKVersion,
+
+  "software.amazon.awssdk" % "glue" % awsSDKVersion,
+  "software.amazon.awssdk" % "s3" % awsSDKVersion,
+  "software.amazon.awssdk" % "dynamodb" % awsSDKVersion,
+  "software.amazon.awssdk" % "kms" % awsSDKVersion,
+  "software.amazon.awssdk" % "sts" % awsSDKVersion,
+  "software.amazon.awssdk" % "url-connection-client" % awsSDKVersion,
+
+  "org.apache.iceberg" %% s"iceberg-spark-runtime-$majorSparkVersion" % "0.14.+",
+
+  // hadoop-common and hadoop-aws should be provided by either platform or user. On EMR, sagemaker processing these are
+  // pre-installed, to avoid dependency conflict which could cause weird failures, we exclude them from fat jar
+  "org.apache.hadoop" % "hadoop-aws" % "3.3.4" % Provided,
+  "org.apache.hadoop" % "hadoop-common" % "3.3.4" % Provided,
   "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
   "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
+
   "org.mockito" %% "mockito-scala-scalatest" % "1.16.37" % Test,
   "org.scalatest" %% "scalatest" % "3.0.8" % Test,
   "org.scalatestplus" %% "testng-6-7" % "3.2.9.0" % Test
 )
 
-dependencyOverrides ++= {
-  Seq(
-    "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.12.5",
-    "com.fasterxml.jackson.core" % "jackson-databind" % "2.12.5",
-    "com.fasterxml.jackson.core" % "jackson-core" % "2.12.5"
-  )
-}
-
 exportJars := true
 lazy val printClasspath = taskKey[Unit]("Dump classpath")
-printClasspath := (fullClasspath in Runtime value) foreach { e => println(e.data) }
+printClasspath := (Runtime / fullClasspath value) foreach { e => println(e.data) }
 
-assemblyMergeStrategy in assembly := {
+assembly / assemblyMergeStrategy := {
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
   case x => MergeStrategy.first
 }
@@ -60,7 +76,7 @@ jacocoReportSettings := JacocoReportSettings()
 
 publishMavenStyle := true
 pomIncludeRepository := { _ => false }
-publishArtifact in Test := false
+Test / publishArtifact := false
 val nexusUriHost = "aws.oss.sonatype.org"
 val nexusUriHostWithScheme = "https://" + nexusUriHost + "/"
 val snapshotUrl = nexusUriHostWithScheme + "content/repositories/snapshots"
@@ -83,15 +99,14 @@ credentials += Credentials(
   sys.env.getOrElse("SONATYPE_USERNAME", "NOT_A_PUBLISH_BUILD"),
   sys.env.getOrElse("SONATYPE_PASSWORD", "NOT_A_PUBLISH_BUILD")
 )
-pomExtra := (
-  <developers>
-    <developer>
-      <id>amazonwebservices</id>
-      <organization>Amazon Web Services</organization>
-      <organizationUrl>https://aws.amazon.com</organizationUrl>
-      <roles>
-        <role>developer</role>
-      </roles>
-    </developer>
-  </developers>
-  )
+
+pomExtra := <developers>
+  <developer>
+    <id>amazonwebservices</id>
+    <organization>Amazon Web Services</organization>
+    <organizationUrl>https://aws.amazon.com</organizationUrl>
+    <roles>
+      <role>developer</role>
+    </roles>
+  </developer>
+</developers>

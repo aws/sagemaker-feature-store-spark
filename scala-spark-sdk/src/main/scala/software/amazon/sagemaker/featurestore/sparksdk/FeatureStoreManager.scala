@@ -16,6 +16,7 @@
 
 package software.amazon.sagemaker.featurestore.sparksdk
 
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import software.amazon.sagemaker.featurestore.sparksdk.helpers.FeatureGroupHelper._
 import software.amazon.sagemaker.featurestore.sparksdk.validators.InputDataSchemaValidator._
 import org.apache.spark.sql.functions.{col, current_timestamp, date_format, lit}
@@ -27,7 +28,9 @@ import org.apache.spark.sql.types.{
   IntegerType,
   LongType,
   ShortType,
-  StringType
+  StringType,
+  StructField,
+  StructType
 }
 
 import collection.JavaConverters._
@@ -39,8 +42,8 @@ import software.amazon.awssdk.services.sagemaker.model.{
   FeatureType
 }
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.SageMakerFeatureStoreRuntimeClient
-import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{FeatureValue, PutRecordRequest}
-import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
+import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{FeatureValue, PutRecordRequest, TargetStore}
+import software.amazon.sagemaker.featurestore.sparksdk.exceptions.{StreamIngestionFailureException, ValidationError}
 import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
   ClientFactory,
   DataFrameRepartitioner,
@@ -50,8 +53,9 @@ import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
 
 import java.util
 import scala.collection.mutable.ListBuffer
+import scala.util.{Failure, Success, Try}
 
-class FeatureStoreManager extends Serializable {
+class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
   val SPARK_TYPE_TO_FEATURE_TYPE_MAP: Map[DataType, FeatureType] = Map(
     StringType  -> FeatureType.STRING,
@@ -63,41 +67,51 @@ class FeatureStoreManager extends Serializable {
     LongType    -> FeatureType.INTEGRAL
   )
 
+  private val ONLINE_INGESTION_ERROR_FILED_NAME: String = "online_ingestion_error"
+
+  private var failedOnlineIngestionDataFrame: Option[DataFrame] = None
+
   /** Batch ingest data into SageMaker FeatureStore.
    *
    *  @param inputDataFrame
    *    input Spark DataFrame to be ingested.
    *  @param featureGroupArn
    *    arn of a feature group.
-   *  @param directOfflineStore
-   *    choose if data should be only ingested to OfflineStore of a FeatureGroup.
+   *  @param targetStores
+   *    choose the target store to ingest the data
    */
-  def ingestData(inputDataFrame: DataFrame, featureGroupArn: String, directOfflineStore: Boolean = false): Unit = {
-
-    SparkSessionInitializer.initializeSparkSession(inputDataFrame.sparkSession)
+  def ingestData(inputDataFrame: DataFrame, featureGroupArn: String, targetStores: List[String] = null): Unit = {
 
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
     val featureGroupName        = featureGroupArnResolver.resolveFeatureGroupName()
     val region                  = featureGroupArnResolver.resolveRegion()
 
+    ClientFactory.initialize(region = region, roleArn = assumeRoleArn)
+
     val describeResponse = getFeatureGroup(featureGroupName)
 
-    checkIfFeatureGroupArnIdentical(describeResponse, featureGroupArn)
     checkIfFeatureGroupIsCreated(describeResponse)
-    checkDirectOfflineStore(describeResponse, directOfflineStore)
+    val parsedTargetStores = checkAndParseTargetStore(describeResponse, targetStores)
 
-    val eventTimeFeatureName    = describeResponse.eventTimeFeatureName()
-    val validatedInputDataFrame = validateInputDataFrame(inputDataFrame, describeResponse)
+    val retrievedStores =
+      if (parsedTargetStores == null) retrieveTargetStoresFromFeatureGroup(describeResponse) else parsedTargetStores
 
-    if (directOfflineStore || !isFeatureGroupOnlineStoreEnabled(describeResponse)) {
+    val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
+    val recordIdentifierName = describeResponse.recordIdentifierFeatureName()
+
+    if (shouldIngestInStream(retrievedStores)) {
+      validateSchemaNames(inputDataFrame.schema.names, describeResponse, recordIdentifierName, eventTimeFeatureName)
+      streamIngestIntoOnlineStore(featureGroupName, inputDataFrame, retrievedStores)
+    } else {
+
+      val validatedInputDataFrame = validateInputDataFrame(inputDataFrame, describeResponse)
+
       batchIngestIntoOfflineStore(
         validatedInputDataFrame,
         describeResponse,
         eventTimeFeatureName,
         region
       )
-    } else {
-      streamIngestIntoOnlineStore(featureGroupName, validatedInputDataFrame)
     }
   }
 
@@ -128,26 +142,63 @@ class FeatureStoreManager extends Serializable {
     featureDefinitions.asJava
   }
 
-  private def streamIngestIntoOnlineStore(featureGroupName: String, inputDataFrame: DataFrame): Unit = {
+  /** Get the dataframe which contains failed records during last online ingestion
+   *
+   *  @return
+   *    dataframe which contains records failed to be ingested
+   */
+  def getFailedOnlineIngestionDataFrame: DataFrame = {
+    failedOnlineIngestionDataFrame.orNull
+  }
+
+  private def streamIngestIntoOnlineStore(
+      featureGroupName: String,
+      inputDataFrame: DataFrame,
+      targetStores: List[TargetStore]
+  ): Unit = {
     val columns                = inputDataFrame.schema.names
     val repartitionedDataFrame = DataFrameRepartitioner.repartition(inputDataFrame)
-    repartitionedDataFrame.foreachPartition((rows: Iterator[Row]) => {
-      putOnlineRecordsForPartition(
-        rows,
-        featureGroupName,
-        columns,
-        ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder.build()
+
+    // Add extra field for reporting online ingestion failures
+    val castWithExceptionSchema = StructType(
+      repartitionedDataFrame.schema.fields ++ Array(StructField(ONLINE_INGESTION_ERROR_FILED_NAME, StringType, true))
+    )
+    val fieldIndexMap = castWithExceptionSchema.fieldNames.zipWithIndex.toMap
+
+    // Encoder needs to be defined during transformation because the original schema is changed
+    failedOnlineIngestionDataFrame = Option(
+      repartitionedDataFrame
+        .mapPartitions(partition => {
+          putOnlineRecordsForPartition(
+            partition,
+            featureGroupName,
+            columns,
+            targetStores,
+            ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder.build()
+          )
+        })(RowEncoder(castWithExceptionSchema))
+        .filter(row => row.getAs[String](fieldIndexMap(ONLINE_INGESTION_ERROR_FILED_NAME)) != null)
+    )
+
+    // MapPartitions and Map are lazily evaluated by spark, so action is needed here to ensure ingestion is executed
+    // For more info: https://spark.apache.org/docs/latest/rdd-programming-guide.html#actions
+    val failedOnlineIngestionDataFrameSize = failedOnlineIngestionDataFrame.get.count()
+
+    if (failedOnlineIngestionDataFrameSize > 0) {
+      throw StreamIngestionFailureException(
+        s"Stream ingestion finished, however ${failedOnlineIngestionDataFrameSize} records failed to be ingested. Please inspect FailedOnlineIngestionDataFrame for more info."
       )
-    })
+    }
   }
 
   private def putOnlineRecordsForPartition(
-      rows: Iterator[Row],
+      partition: Iterator[Row],
       featureGroupName: String,
       columns: Array[String],
+      targetStores: List[TargetStore],
       runTimeClient: SageMakerFeatureStoreRuntimeClient
-  ): Unit = {
-    rows.foreach(row => {
+  ): Iterator[Row] = {
+    val newPartition = partition.map(row => {
       val record = ListBuffer[FeatureValue]()
       columns.foreach(columnName => {
         try {
@@ -163,17 +214,24 @@ class FeatureStoreManager extends Serializable {
           case e: Throwable => throw new RuntimeException(e)
         }
       })
-      try {
+
+      val errorMessage = Try {
         val putRecordRequest = PutRecordRequest
           .builder()
           .featureGroupName(featureGroupName)
           .record(record.asJava)
+          .targetStores(targetStores.asJava)
           .build()
         runTimeClient.putRecord(putRecordRequest)
-      } catch {
-        case e: Throwable => throw new RuntimeException(e)
+      } match {
+        case Success(value) => null
+        case Failure(ex)    => ex.getMessage
       }
+
+      Row.fromSeq(row.toSeq.toList :+ errorMessage)
     })
+
+    newPartition
   }
 
   private def batchIngestIntoOfflineStore(
@@ -195,6 +253,7 @@ class FeatureStoreManager extends Serializable {
     SparkSessionInitializer.initializeSparkSessionForOfflineStore(
       dataFrame.sparkSession,
       offlineStoreEncryptionKeyId,
+      assumeRoleArn,
       region
     )
 
@@ -225,5 +284,9 @@ class FeatureStoreManager extends Serializable {
       .featureGroupName(featureGroupName)
       .build()
     ClientFactory.sageMakerClient.describeFeatureGroup(describeRequest)
+  }
+
+  private def shouldIngestInStream(targetStores: List[TargetStore]): Boolean = {
+    targetStores.contains(TargetStore.ONLINE_STORE)
   }
 }

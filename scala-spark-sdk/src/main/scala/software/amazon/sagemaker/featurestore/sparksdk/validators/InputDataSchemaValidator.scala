@@ -48,14 +48,7 @@ object InputDataSchemaValidator {
     val recordIdentifierName = describeResponse.recordIdentifierFeatureName()
     val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
 
-    val featuresInFeatureGroup = describeResponse
-      .featureDefinitions()
-      .asScala
-      .toStream
-      .map(feature => feature.featureName())
-      .toSet
-
-    validateSchemaNames(dataFrame.schema.names, featuresInFeatureGroup, recordIdentifierName, eventTimeFeatureName)
+    validateSchemaNames(dataFrame.schema.names, describeResponse, recordIdentifierName, eventTimeFeatureName)
 
     // Numeric data types validation - For example, verify that only numeric values that are within bounds
     // of the Integer and Double data types are present in the corresponding fields.
@@ -101,9 +94,9 @@ object InputDataSchemaValidator {
     }: _*)
   }
 
-  private def validateSchemaNames(
+  def validateSchemaNames(
       schemaNames: Array[String],
-      features: Set[String],
+      describeResponse: DescribeFeatureGroupResponse,
       recordIdentifierName: String,
       eventTimeFeatureName: String
   ): Unit = {
@@ -111,6 +104,13 @@ object InputDataSchemaValidator {
     val invalidCharSetPattern       = Pattern.compile(invalidCharSet)
     val unknown_columns             = ListBuffer[String]()
     var missingRequiredFeatureNames = Set(recordIdentifierName, eventTimeFeatureName)
+
+    val features = describeResponse
+      .featureDefinitions()
+      .asScala
+      .toStream
+      .map(feature => feature.featureName())
+      .toSet
 
     for (name <- schemaNames) {
       // Verify there are no invalid characters ",;{}()\n\t=" in the schema names.

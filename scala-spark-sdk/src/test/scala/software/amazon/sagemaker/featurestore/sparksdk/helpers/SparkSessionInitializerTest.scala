@@ -13,29 +13,47 @@ class SparkSessionInitializerTest extends TestNGSuite {
     .master("local")
     .getOrCreate()
 
-  @Test
-  def initializeSparkSessionTest(): Unit = {
-    SparkSessionInitializer.initializeSparkSession(sparkSession)
-
-    assertEquals(
-      sparkSession.sparkContext.hadoopConfiguration
-        .get("fs.s3a.aws.credentials.provider"),
-      "com.amazonaws.auth.ContainerCredentialsProvider," +
-        "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
-    )
-  }
-
   @Test(dataProvider = "initializeSparkSessionForOfflineStoreDataProvider")
   def initializeSparkSessionForOfflineStoreTest(
       offlineStoreKmsKeyId: String,
+      assumeRoleArn: String,
       region: String,
       expectedS3Endpoint: String
   ): Unit = {
     SparkSessionInitializer.initializeSparkSessionForOfflineStore(
       sparkSession,
       offlineStoreKmsKeyId,
+      assumeRoleArn,
       region
     )
+
+    if (assumeRoleArn == null) {
+      assertEquals(
+        sparkSession.sparkContext.hadoopConfiguration
+          .get("fs.s3a.aws.credentials.provider"),
+        "com.amazonaws.auth.ContainerCredentialsProvider," +
+          "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+      )
+    } else {
+      assertEquals(
+        sparkSession.sparkContext.hadoopConfiguration
+          .get("fs.s3a.aws.credentials.provider"),
+        "org.apache.hadoop.fs.s3a.auth.AssumedRoleCredentialProvider"
+      )
+
+      assertEquals(
+        sparkSession.sparkContext.hadoopConfiguration
+          .get("fs.s3a.assumed.role.credentials.provider"),
+        "com.amazonaws.auth.ContainerCredentialsProvider," +
+          "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+      )
+
+      assertEquals(
+        sparkSession.sparkContext.hadoopConfiguration
+          .get("fs.s3a.assumed.role.arn"),
+        assumeRoleArn
+      )
+    }
 
     val hadoopConfiguration = sparkSession.sparkContext.hadoopConfiguration
     assertEquals(
@@ -65,14 +83,20 @@ class SparkSessionInitializerTest extends TestNGSuite {
         hadoopConfiguration.get("fs.s3a.endpoint"),
         expectedS3Endpoint
       )
+    } else {
+      assertEquals(
+        hadoopConfiguration.get("fs.s3a.endpoint"),
+        expectedS3Endpoint
+      )
     }
   }
 
   @DataProvider
   def initializeSparkSessionForOfflineStoreDataProvider(): Array[Array[Any]] = {
     Array(
-      Array("offline-store-kms-key-id", "us-west-2", null),
-      Array(null, "cn-north-1", "s3.cn-north-1.amazonaws.com.cn")
+      Array("offline-store-kms-key-id", null, "us-west-2", "s3.us-west-2.amazonaws.com"),
+      Array("offline-store-kms-key-id", "test-role-arn", "us-west-2", "s3.us-west-2.amazonaws.com"),
+      Array(null, null, "cn-north-1", "s3.cn-north-1.amazonaws.com.cn")
     )
   }
 }
