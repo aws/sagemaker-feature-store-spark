@@ -99,7 +99,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
     val recordIdentifierName = describeResponse.recordIdentifierFeatureName()
 
-    if (shouldIngestInStream(retrievedStores)) {
+    if (shouldIngestInStream(retrievedStores) || parsedTargetStores == null) {
       validateSchemaNames(inputDataFrame.schema.names, describeResponse, recordIdentifierName, eventTimeFeatureName)
       streamIngestIntoOnlineStore(featureGroupName, inputDataFrame, retrievedStores)
     } else {
