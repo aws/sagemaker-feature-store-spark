@@ -14,11 +14,11 @@ import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.assertEquals
 import org.testng.annotations.{AfterTest, BeforeClass, DataProvider, Test}
 import software.amazon.awssdk.services.sagemaker.SageMakerClient
-import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupRequest, DescribeFeatureGroupResponse, FeatureDefinition, FeatureGroupStatus, FeatureType, OfflineStoreConfig, OnlineStoreConfig, S3StorageConfig}
+import software.amazon.awssdk.services.sagemaker.model.{DataCatalogConfig, DescribeFeatureGroupRequest, DescribeFeatureGroupResponse, FeatureDefinition, FeatureGroupStatus, FeatureType, OfflineStoreConfig, OnlineStoreConfig, S3StorageConfig, TableFormat}
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{FeatureValue, PutRecordRequest, PutRecordResponse, TargetStore}
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.{SageMakerFeatureStoreRuntimeClient, SageMakerFeatureStoreRuntimeClientBuilder}
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.{StreamIngestionFailureException, ValidationError}
-import software.amazon.sagemaker.featurestore.sparksdk.helpers.ClientFactory
+import software.amazon.sagemaker.featurestore.sparksdk.helpers.{ClientFactory, SparkSessionInitializer}
 
 import java.io.File
 import scala.reflect.io.Directory
@@ -29,6 +29,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
     .builder()
     .appName("TestProgram")
     .master("local")
+    .config("spark.sql.catalogImplementation", "in-memory")
     .getOrCreate()
   import sparkSession.implicits._
 
@@ -44,6 +45,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
 
   @BeforeClass
   def setup(): Unit = {
+    ClientFactory.skipInitialization = true
     ClientFactory.sageMakerClient = mockedSageMakerClient
     ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder = mockedSageMakerFeatureStoreRuntimeClientBuilder
 
@@ -80,27 +82,21 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
       )
       .build()
 
-    withObjectMocked[ClientFactory.type] {
-      when(ClientFactory.sageMakerClient).thenReturn(mockedSageMakerClient)
-      when(ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder).thenReturn(mockedSageMakerFeatureStoreRuntimeClientBuilder)
-      when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
 
-      doNothing().when(ClientFactory).initialize(anyString(), anyString())
+    featureStoreManager.ingestData(
+      inputDataFrame,
+      TEST_FEATURE_GROUP_ARN,
+      inputTargetStores
+    )
+    verify(mockedSageMakerFeatureStoreRuntimeClient).putRecord(
+      putRecordRequestCaptor
+    )
+    putRecordRequestCaptor.hasCaptured(expectedPutRecordRequest)
 
-      featureStoreManager.ingestData(
-        inputDataFrame,
-        TEST_FEATURE_GROUP_ARN,
-        inputTargetStores
-      )
-      verify(mockedSageMakerFeatureStoreRuntimeClient).putRecord(
-        putRecordRequestCaptor
-      )
-      putRecordRequestCaptor.hasCaptured(expectedPutRecordRequest)
+    val failedStreamIngestionDataFrame = featureStoreManager.getFailedStreamIngestionDataFrame
 
-      val failedOnlineIngestionDataFrame = featureStoreManager.getFailedOnlineIngestionDataFrame
-
-      assertEquals(failedOnlineIngestionDataFrame.count(), 0)
-    }
+    assertEquals(failedStreamIngestionDataFrame.count(), 0)
   }
 
   @Test(dataProvider = "ingestDataStreamOnlineStoreTestDataProvider")
@@ -131,34 +127,31 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
       )
       .build()
 
-    withObjectMocked[ClientFactory.type] {
-      when(ClientFactory.sageMakerClient).thenReturn(mockedSageMakerClient)
-      when(ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder).thenReturn(mockedSageMakerFeatureStoreRuntimeClientBuilder)
-      when(mockedSageMakerFeatureStoreRuntimeClient.putRecord(any(classOf[PutRecordRequest]))).thenThrow(new RuntimeException("test error"))
-      when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+    when(mockedSageMakerFeatureStoreRuntimeClient.putRecord(any(classOf[PutRecordRequest]))).thenThrow(new RuntimeException("test error"))
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
 
-      doNothing().when(ClientFactory).initialize(anyString(), anyString())
+    ClientFactory.sageMakerClient = mockedSageMakerClient
+    ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder = mockedSageMakerFeatureStoreRuntimeClientBuilder
 
-      val caught = intercept[StreamIngestionFailureException] {
-        featureStoreManager.ingestData(
-          inputDataFrame,
-          TEST_FEATURE_GROUP_ARN,
-          inputTargetStores
-        )
-      }
-
-      caught.message shouldBe "Stream ingestion finished, however 1 records failed to be ingested. Please inspect FailedOnlineIngestionDataFrame for more info."
-
-      val failedOnlineIngestionDataFrame = featureStoreManager.getFailedOnlineIngestionDataFrame
-
-
-      assertEquals(failedOnlineIngestionDataFrame.count(), inputDataFrame.count())
-      assertEquals(failedOnlineIngestionDataFrame.first().getAs[String]("online_ingestion_error"), "test error")
+    val caught = intercept[StreamIngestionFailureException] {
+      featureStoreManager.ingestData(
+        inputDataFrame,
+        TEST_FEATURE_GROUP_ARN,
+        inputTargetStores
+      )
     }
+
+    caught.message shouldBe "Stream ingestion finished, however 1 records failed to be ingested. Please inspect failed stream ingestion data frame for more info."
+
+    val failedStreamIngestionDataFrame = featureStoreManager.getFailedStreamIngestionDataFrame
+
+
+    assertEquals(failedStreamIngestionDataFrame.count(), inputDataFrame.count())
+    assertEquals(failedStreamIngestionDataFrame.first().getAs[String]("online_ingestion_error"), "test error")
   }
 
-  @Test(dataProvider = "ingestDataBatchOfflineStoreTestDataProvider")
-  def ingestDataBatchOfflineStoreTest(
+  @Test(dataProvider = "ingestDataBatchOfflineStoreGlueTableTestDataProvider")
+  def ingestDataBatchOfflineStoreGlueTableTest(
       inputDataFrame: DataFrame,
       putRecordRequest: PutRecordRequest,
       targetStores: List[String]
@@ -186,6 +179,135 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
       .offlineStoreConfig(
         OfflineStoreConfig
           .builder()
+          .tableFormat(TableFormat.GLUE)
+          .s3StorageConfig(
+            S3StorageConfig
+              .builder()
+              .resolvedOutputS3Uri(resolvedOutputPath)
+              .build()
+          )
+          .build()
+      )
+      .build()
+    when(
+      mockedSageMakerClient
+        .describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))
+    ).thenReturn(response)
+
+    withObjectMocked[ClientFactory.type] {
+      when(ClientFactory.sageMakerClient).thenReturn(mockedSageMakerClient)
+
+      doNothing().when(ClientFactory).initialize(anyString(), anyString())
+
+      featureStoreManager.ingestData(
+        inputDataFrame,
+        TEST_FEATURE_GROUP_ARN,
+        targetStores
+      )
+    }
+
+    verify(mockedSageMakerFeatureStoreRuntimeClient, times(0))
+      .putRecord(putRecordRequest)
+    verifyDataIngestedInOfflineStore(inputDataFrame, resolvedOutputPath)
+  }
+
+  @Test
+  def ingestDataBatchOfflineStoreIcebergTableTest(): Unit = {
+
+    val resolvedOutputPath = TEST_ARTIFACT_ROOT + "/iceberg-table-ingestion"
+
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .eventTimeFeatureName("event_time")
+      .recordIdentifierFeatureName("record_identifier")
+      .featureDefinitions(
+        FeatureDefinition
+          .builder()
+          .featureName("record_identifier")
+          .featureType(FeatureType.STRING)
+          .build(),
+        FeatureDefinition
+          .builder()
+          .featureName("event_time")
+          .featureType(FeatureType.STRING)
+          .build()
+      )
+      .offlineStoreConfig(
+        OfflineStoreConfig
+          .builder()
+          .tableFormat(TableFormat.ICEBERG)
+          .dataCatalogConfig(
+            DataCatalogConfig
+              .builder()
+              .catalog("local")
+              .database("db")
+              .tableName("table").build()
+          )
+          .s3StorageConfig(
+            S3StorageConfig
+              .builder()
+              .resolvedOutputS3Uri(resolvedOutputPath)
+              .build()
+          )
+          .build()
+      )
+      .build()
+
+    when(
+      mockedSageMakerClient
+        .describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))
+    ).thenReturn(response)
+
+    val inputDataFrame = Seq(("identifier-1", "2021-05-06T05:12:14Z")).toDF("record_identifier", "event_time")
+
+    withObjectMocked[SparkSessionInitializer.type] {
+      doNothing().when(SparkSessionInitializer).initializeSparkSessionForIcebergTable(
+        any(), anyString(), anyString(), anyString(), anyString(), anyString())
+
+      // Create a local derby local database which enables to create local metastores for unit tests
+      sparkSession.conf.set("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
+      sparkSession.conf.set("spark.sql.catalog.local.type", "hadoop")
+      sparkSession.conf.set("spark.sql.catalog.local.warehouse", "test_warehouse")
+      sparkSession.sql("CREATE TABLE IF NOT EXISTS local.db.table (record_identifier string, event_time string, api_invocation_time timestamp, write_time timestamp, is_deleted boolean) USING iceberg PARTITIONED BY (truncate(event_time, 10))")
+
+      featureStoreManager.ingestData(
+        inputDataFrame,
+        TEST_FEATURE_GROUP_ARN,
+        List("OfflineStore")
+      )
+      verifyDataIngestedInOfflineStore(inputDataFrame, "test_warehouse/db/table/data")
+    }
+    sparkSession.sql("DROP TABLE IF EXISTS local.db.table")
+  }
+
+  @Test(expectedExceptions = Array(classOf[RuntimeException]))
+  def ingestDataBatchOfflineStoreInvalidTableFormatTest(): Unit = {
+    val resolvedOutputPath =
+      TEST_ARTIFACT_ROOT + "/ingest-data-direct-offline-store-test/only-offline-store-enabled"
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .eventTimeFeatureName("event-time")
+      .recordIdentifierFeatureName("record-identifier")
+      .featureDefinitions(
+        FeatureDefinition
+          .builder()
+          .featureName("record-identifier")
+          .featureType(FeatureType.STRING)
+          .build(),
+        FeatureDefinition
+          .builder()
+          .featureName("event-time")
+          .featureType(FeatureType.STRING)
+          .build()
+      )
+      .offlineStoreConfig(
+        OfflineStoreConfig
+          .builder()
+          .tableFormat(TableFormat.UNKNOWN_TO_SDK_VERSION)
           .s3StorageConfig(
             S3StorageConfig
               .builder()
@@ -207,15 +329,11 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
       doNothing().when(ClientFactory).initialize(anyString(), anyString())
 
       featureStoreManager.ingestData(
-        inputDataFrame,
+        Seq((123, 100.0, "dummy")).toDF("feature-integral", "feature-fractional", "feature-string"),
         TEST_FEATURE_GROUP_ARN,
-        targetStores
+        List("OfflineStore")
       )
     }
-
-    verify(mockedSageMakerFeatureStoreRuntimeClient, times(0))
-      .putRecord(putRecordRequest)
-    verifyDataIngestedInOfflineStore(inputDataFrame, resolvedOutputPath)
   }
 
   @Test(dataProvider = "loadFeatureDefinitionsFromSchemaTestDataProvider")
@@ -266,7 +384,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
   }
 
   @DataProvider
-  def ingestDataBatchOfflineStoreTestDataProvider(): Array[Array[Any]] = {
+  def ingestDataBatchOfflineStoreGlueTableTestDataProvider(): Array[Array[Any]] = {
     Array(
       Array(
         Seq(("identifier-1", "2021-05-06T05:12:14Z"))

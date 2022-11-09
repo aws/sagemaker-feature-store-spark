@@ -19,10 +19,14 @@ lazy val SageMakerFeatureStoreSpark = (project in file(".")).settings(
   assembly / assemblyOutputPath := file(s"./assembly-output/${(assembly/assemblyJarName).value}")
 )
 
-val sparkVersion = System.getProperty("SPARK_VERSION", "3.2.0")
+val sparkVersion = System.getProperty("SPARK_VERSION", "3.1.2")
 val majorSparkVersion = sparkVersion.substring(0, sparkVersion.lastIndexOf("."))
 
 val awsSDKVersion = "2.17.+"
+val sparkVersionToHadoopVersionMap = Map(
+  "3.1" -> "3.2.1",
+  "3.2" -> "3.3.4"
+)
 
 // read the version number
 version := {
@@ -33,7 +37,7 @@ version := {
 scalaVersion := "2.12.8"
 
 libraryDependencies ++= Seq(
-  // SDK v2 is required by iceberg and spark connector. Since some platfomrs do not provide these dependencies, we
+  // SDK v2 is required by iceberg and spark connector. Since some platforms do not provide these dependencies, we
   // pack them up and provide for users
   //  "software.amazon.awssdk" % "sagemaker" % awsSDKVersion,
   //  "software.amazon.awssdk" % "sagemakerfeaturestoreruntime" % awsSDKVersion,
@@ -48,15 +52,16 @@ libraryDependencies ++= Seq(
   "org.apache.iceberg" %% s"iceberg-spark-runtime-$majorSparkVersion" % "0.14.+",
 
   // hadoop-common and hadoop-aws should be provided by either platform or user. On EMR, sagemaker processing these are
-  // pre-installed, to avoid dependency conflict which could cause weird failures, we exclude them from fat jar
-  "org.apache.hadoop" % "hadoop-aws" % "3.3.4" % Provided,
-  "org.apache.hadoop" % "hadoop-common" % "3.3.4" % Provided,
+  // pre-installed, to avoid dependency conflict which could cause weird failures, we exclude them from fat jar. Besides
+  // spark has a tight coupling with the version of hadoop.
+  "org.apache.hadoop" % "hadoop-aws" % sparkVersionToHadoopVersionMap(majorSparkVersion) % Provided,
+  "org.apache.hadoop" % "hadoop-common" %  sparkVersionToHadoopVersionMap(majorSparkVersion) % Provided,
   "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
   "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
 
-  "org.mockito" %% "mockito-scala-scalatest" % "1.16.37" % Test,
+  "org.mockito" %% "mockito-scala-scalatest" % "1.17.12" % Test,
   "org.scalatest" %% "scalatest" % "3.0.8" % Test,
-  "org.scalatestplus" %% "testng-6-7" % "3.2.9.0" % Test
+  "org.scalatestplus" %% "testng-6-7" % "3.2.9.0" % Test,
 )
 
 exportJars := true

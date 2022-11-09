@@ -16,7 +16,7 @@
 
 package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
-import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureGroupStatus}
+import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureGroupStatus, TableFormat}
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.TargetStore
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 
@@ -124,6 +124,32 @@ object FeatureGroupHelper {
     val offlineStoreConfig = Option(describeResponse.offlineStoreConfig())
 
     offlineStoreConfig.nonEmpty
+  }
+
+  /** Check if FeatureGruop has iceberg table enabled.
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   *  @return
+   *    true if iceberg table of FeatureGroup is enabled.
+   */
+  def isIcebergTableEnabled(describeResponse: DescribeFeatureGroupResponse): Boolean = {
+    val offlineStoreConfig = Option(describeResponse.offlineStoreConfig())
+
+    offlineStoreConfig.nonEmpty && TableFormat.ICEBERG.equals(offlineStoreConfig.get.tableFormat())
+  }
+
+  /** Check if FeatureGruop has glue table enabled.
+   *
+   *  @param describeResponse
+   *    response of DescribeFeatureGroup.
+   *  @return
+   *    true if glue table of FeatureGroup is enabled.
+   */
+  def isGlueTableEnabled(describeResponse: DescribeFeatureGroupResponse): Boolean = {
+    val offlineStoreConfig = Option(describeResponse.offlineStoreConfig())
+
+    offlineStoreConfig.nonEmpty && TableFormat.GLUE.equals(offlineStoreConfig.get.tableFormat())
   }
 
   /** Generate the destination file path of output data.

@@ -3,7 +3,7 @@ package software.amazon.sagemaker.featurestore.sparksdk.helpers
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.assertEquals
 import org.testng.annotations.{DataProvider, Test}
-import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureGroupStatus, OfflineStoreConfig, OnlineStoreConfig, S3StorageConfig}
+import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureGroupStatus, OfflineStoreConfig, OnlineStoreConfig, S3StorageConfig, TableFormat}
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.TargetStore
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 
@@ -99,6 +99,16 @@ class FeatureGroupHelperTest extends TestNGSuite {
       FeatureGroupHelper.generateDestinationFilePath(response),
       "s3a://test/resolved/output/s3/uri"
     )
+  }
+
+  @Test(dataProvider = "isIcebergTableEnabledTestDataProvider")
+  def isIcebergTableEnabledTest(describeResponse: DescribeFeatureGroupResponse, expectedResult: Boolean): Unit = {
+    assertEquals(FeatureGroupHelper.isIcebergTableEnabled(describeResponse), expectedResult)
+  }
+
+  @Test(dataProvider = "isGlueTableEnabledTestDataProvider")
+  def isGlueTableEnabledTest(describeResponse: DescribeFeatureGroupResponse, expectedResult: Boolean): Unit = {
+    assertEquals(FeatureGroupHelper.isGlueTableEnabled(describeResponse), expectedResult)
   }
 
   @DataProvider
@@ -216,6 +226,24 @@ class FeatureGroupHelperTest extends TestNGSuite {
         .build(),
         List(TargetStore.ONLINE_STORE, TargetStore.OFFLINE_STORE)
       )
+    )
+  }
+
+  @DataProvider
+  def isIcebergTableEnabledTestDataProvider(): Array[Array[Any]] = {
+    Array(
+      Array(DescribeFeatureGroupResponse.builder().offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.ICEBERG).build()).build(), true),
+      Array(DescribeFeatureGroupResponse.builder().offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.GLUE).build()).build(), false),
+      Array(DescribeFeatureGroupResponse.builder().build(), false)
+    )
+  }
+
+  @DataProvider
+  def isGlueTableEnabledTestDataProvider(): Array[Array[Any]] = {
+    Array(
+      Array(DescribeFeatureGroupResponse.builder().offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.ICEBERG).build()).build(), false),
+      Array(DescribeFeatureGroupResponse.builder().offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.GLUE).build()).build(), true),
+      Array(DescribeFeatureGroupResponse.builder().build(), false)
     )
   }
 }

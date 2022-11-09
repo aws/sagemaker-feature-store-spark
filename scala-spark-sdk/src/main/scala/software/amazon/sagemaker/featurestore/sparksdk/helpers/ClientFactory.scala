@@ -30,6 +30,7 @@ import software.amazon.awssdk.services.sts.StsClient
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider
 import software.amazon.awssdk.services.sts.model.AssumeRoleRequest
 
+import java.net.URI
 import java.util.UUID
 
 /** This factory provides the default client and configurations.
@@ -42,6 +43,8 @@ object ClientFactory {
   private var _stsAssumeRoleCredentialsProvider: Option[StsAssumeRoleCredentialsProvider]                   = None
   private var _sageMakerClient: Option[SageMakerClient]                                                     = None
   private var _sageMakerFeatureStoreRuntimeClientBuilder: Option[SageMakerFeatureStoreRuntimeClientBuilder] = None
+  private var _skipInitialization: Boolean                                                                  = false
+  private var _useGammaEndpoint: Boolean                                                                    = false
 
   // Getters
   def sageMakerClient: SageMakerClient = _sageMakerClient.orNull
@@ -50,6 +53,8 @@ object ClientFactory {
   def assumeRoleArn: String                                              = _assumeRoleArn.orNull
   def region: String                                                     = _region.orNull
   def stsAssumeRoleCredentialsProvider: StsAssumeRoleCredentialsProvider = _stsAssumeRoleCredentialsProvider.orNull
+  def skipInitialization: Boolean                                        = _skipInitialization
+  def useGammaEndpoint: Boolean                                          = _useGammaEndpoint
 
   // Setters
   @VisibleForTesting
@@ -65,6 +70,10 @@ object ClientFactory {
   @VisibleForTesting
   def stsAssumeRoleCredentialsProvider_=(credentialsProvider: StsAssumeRoleCredentialsProvider): Unit =
     _stsAssumeRoleCredentialsProvider = Option(credentialsProvider)
+  @VisibleForTesting
+  def skipInitialization_=(skipInitialization: Boolean): Unit = _skipInitialization = skipInitialization
+  @VisibleForTesting
+  def useGammaEndpoint_=(useGammaEndpoint: Boolean): Unit = _useGammaEndpoint = useGammaEndpoint
 
   /** Initialize the client factory
    *
@@ -75,6 +84,10 @@ object ClientFactory {
    *    arn
    */
   def initialize(region: String, roleArn: String = null): Unit = {
+    if (skipInitialization) {
+      return
+    }
+
     this.assumeRoleArn = roleArn
     this.region = region
     this.stsAssumeRoleCredentialsProvider = getStsAssumeRoleCredentialsProvider
@@ -92,10 +105,16 @@ object ClientFactory {
       sageMakerClientBuilder.credentialsProvider(stsAssumeRoleCredentialsProvider)
     }
 
+    if (_useGammaEndpoint) {
+      sageMakerClientBuilder.endpointOverride(
+        URI.create(f"https://api.sagemaker.gamma.$region.ml-platform.aws.a2z.com")
+      )
+    }
+
     sageMakerClientBuilder.build()
   }
 
-  private def getDefaultFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder = {
+  def getDefaultFeatureStoreRuntimeClientBuilder: SageMakerFeatureStoreRuntimeClientBuilder = {
     val sageMakerFeatureStoreRuntimeClient =
       SageMakerFeatureStoreRuntimeClient
         .builder()
@@ -110,6 +129,12 @@ object ClientFactory {
 
     if (_assumeRoleArn.nonEmpty) {
       sageMakerFeatureStoreRuntimeClient.credentialsProvider(stsAssumeRoleCredentialsProvider)
+    }
+
+    if (_useGammaEndpoint) {
+      sageMakerFeatureStoreRuntimeClient.endpointOverride(
+        URI.create(f"https://yavapai-runtime.gamma.$region.ml-platform.aws.a2z.com")
+      )
     }
 
     sageMakerFeatureStoreRuntimeClient

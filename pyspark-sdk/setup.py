@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import subprocess
+import pkg_resources
 
 from setuptools import setup
 from setuptools.command.install import install
@@ -14,7 +15,7 @@ VERSION_PATH = "VERSION"
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
 SCALA_SPARK_DIR = Path("../scala-spark-sdk")
 UBER_JAR_NAME_PREFIX = "sagemaker-feature-store-spark-sdk"
-UBER_JAR_SYMLINK_NAME = f"sagemaker-feature-store-spark-sdk.jar"
+UBER_JAR_NAME = f"{UBER_JAR_NAME_PREFIX}.jar"
 
 in_spark_sdk = os.path.isfile(SCALA_SPARK_DIR / "build.sbt")
 # read the contents of your README file
@@ -29,33 +30,21 @@ def read(fname):
 def read_version():
     return read(VERSION_PATH).strip()
 
-# This is a post installation step. It will create a symlink to feature store spark uber jar in $SPARK_HOME/jars.
-# When feature store spark connector is upgraded, the symlink will be unlinked to the old target first and then relink to the new target uber jar.
+# This is a post installation step. It will copy feature store spark uber jar to $SPARK_HOME/jars
 class CustomInstall(install):
     def run(self):
         install.run(self)
         spark_home_dir = os.environ.get('SPARK_HOME', None)
         if spark_home_dir:
-            print("Creating symlink in SPARK_HOME pointing to depdendent jar...")
-            symlink_dir = Path(spark_home_dir) / "jars" / UBER_JAR_SYMLINK_NAME
-
-            # TODO: Put the valid jar name here pointing to the correct dependent jar file
+            uber_jar_target = Path(spark_home_dir) / "jars" / UBER_JAR_NAME
+            
             jars_in_deps = os.listdir(Path(os.getcwd()) / Path(JARS_TARGET))
             uber_jar_name = [jar for jar in jars_in_deps if jar.startswith(UBER_JAR_NAME_PREFIX)].pop()
             uber_jar_dir = Path(os.getcwd()) / Path(JARS_TARGET) / uber_jar_name
-            
-            if not os.path.exists(symlink_dir):
-                print(f"linking from {uber_jar_dir} to {symlink_dir}")
-                os.symlink(uber_jar_dir, symlink_dir)
-            elif os.path.islink(symlink_dir):
-                link_target = os.readlink(symlink_dir)
-                if not os.path.basename(link_target).startswith(UBER_JAR_NAME_PREFIX) or not os.path.basename(link_target).endswith(".jar"):
-                    print(f"Failed to link {symlink_dir} to feature store spark SDK jar because it is linked to some file cannot be recognized.", file=sys.stderr)
-                    exit(-1)
-                else:
-                    os.unlink(symlink_dir)
-                    os.symlink(uber_jar_dir, symlink_dir)
-            ## TODO: if the target is not a symlink, the intallation should just fail
+
+            print(f"Copying feature store uber jar to {uber_jar_target}")
+            shutil.copy(uber_jar_dir, uber_jar_target)
+
         else:
             print("Environment variable SPARK_HOME is not set, dependent jars are not installed to SPARK_HOME.")
         print("Installation finished.")
@@ -73,6 +62,7 @@ if in_spark_sdk:
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE,
                          cwd=SCALA_SPARK_DIR)
+    p.communicate()
     
     # retrieve all jars under 'assembly-output'
     classpath = []
@@ -89,9 +79,10 @@ if in_spark_sdk:
 
     if not os.path.exists(JARS_TARGET):
         os.mkdir(JARS_TARGET)
-    for jar in classpath:
-        target_path = os.path.join(JARS_TARGET, os.path.basename(jar))
-        shutil.copy(jar, target_path)
+
+    uber_jar_path = [jar for jar in classpath if os.path.basename(jar).startswith(UBER_JAR_NAME_PREFIX)].pop()  
+    target_path = os.path.join(JARS_TARGET, UBER_JAR_NAME)
+    shutil.copy(uber_jar_path, target_path)
 
 else:
     if not os.path.exists(JARS_TARGET):

@@ -19,7 +19,7 @@ package software.amazon.sagemaker.featurestore.sparksdk
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import software.amazon.sagemaker.featurestore.sparksdk.helpers.FeatureGroupHelper._
 import software.amazon.sagemaker.featurestore.sparksdk.validators.InputDataSchemaValidator._
-import org.apache.spark.sql.functions.{col, current_timestamp, date_format, lit}
+import org.apache.spark.sql.functions.{col, current_timestamp, date_format, lit, trunc}
 import org.apache.spark.sql.types.{
   ByteType,
   DataType,
@@ -55,7 +55,7 @@ import java.util
 import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
-class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
+class FeatureStoreManager(assumeRoleArn: String = null, useGammaEndpoint: Boolean = false) extends Serializable {
 
   val SPARK_TYPE_TO_FEATURE_TYPE_MAP: Map[DataType, FeatureType] = Map(
     StringType  -> FeatureType.STRING,
@@ -69,7 +69,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
   private val ONLINE_INGESTION_ERROR_FILED_NAME: String = "online_ingestion_error"
 
-  private var failedOnlineIngestionDataFrame: Option[DataFrame] = None
+  private var failedStreamIngestionDataFrame: Option[DataFrame] = None
 
   /** Batch ingest data into SageMaker FeatureStore.
    *
@@ -86,6 +86,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val featureGroupName        = featureGroupArnResolver.resolveFeatureGroupName()
     val region                  = featureGroupArnResolver.resolveRegion()
 
+    ClientFactory.useGammaEndpoint = useGammaEndpoint
     ClientFactory.initialize(region = region, roleArn = assumeRoleArn)
 
     val describeResponse = getFeatureGroup(featureGroupName)
@@ -93,15 +94,12 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     checkIfFeatureGroupIsCreated(describeResponse)
     val parsedTargetStores = checkAndParseTargetStore(describeResponse, targetStores)
 
-    val retrievedStores =
-      if (parsedTargetStores == null) retrieveTargetStoresFromFeatureGroup(describeResponse) else parsedTargetStores
-
     val eventTimeFeatureName = describeResponse.eventTimeFeatureName()
     val recordIdentifierName = describeResponse.recordIdentifierFeatureName()
 
-    if (shouldIngestInStream(retrievedStores) || parsedTargetStores == null) {
+    if (parsedTargetStores == null || shouldIngestInStream(parsedTargetStores)) {
       validateSchemaNames(inputDataFrame.schema.names, describeResponse, recordIdentifierName, eventTimeFeatureName)
-      streamIngestIntoOnlineStore(featureGroupName, inputDataFrame, retrievedStores)
+      streamIngestIntoOnlineStore(featureGroupName, inputDataFrame, parsedTargetStores, region)
     } else {
 
       val validatedInputDataFrame = validateInputDataFrame(inputDataFrame, describeResponse)
@@ -113,6 +111,14 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         region
       )
     }
+  }
+
+  def ingestDataInJava(
+      inputDataFrame: org.apache.spark.sql.Dataset[Row],
+      featureGroupArn: java.lang.String,
+      targetStores: java.util.ArrayList[String] = null
+  ): Unit = {
+    ingestData(inputDataFrame, featureGroupArn, if (targetStores != null) targetStores.asScala.toList else null)
   }
 
   /** Load feature definitions according to the schema of input data frame.
@@ -147,14 +153,15 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
    *  @return
    *    dataframe which contains records failed to be ingested
    */
-  def getFailedOnlineIngestionDataFrame: DataFrame = {
-    failedOnlineIngestionDataFrame.orNull
+  def getFailedStreamIngestionDataFrame: DataFrame = {
+    failedStreamIngestionDataFrame.orNull
   }
 
   private def streamIngestIntoOnlineStore(
       featureGroupName: String,
       inputDataFrame: DataFrame,
-      targetStores: List[TargetStore]
+      targetStores: List[TargetStore],
+      region: String
   ): Unit = {
     val columns                = inputDataFrame.schema.names
     val repartitionedDataFrame = DataFrameRepartitioner.repartition(inputDataFrame)
@@ -166,9 +173,12 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val fieldIndexMap = castWithExceptionSchema.fieldNames.zipWithIndex.toMap
 
     // Encoder needs to be defined during transformation because the original schema is changed
-    failedOnlineIngestionDataFrame = Option(
+    failedStreamIngestionDataFrame = Option(
       repartitionedDataFrame
         .mapPartitions(partition => {
+          ClientFactory.useGammaEndpoint = useGammaEndpoint
+          ClientFactory.initialize(region, assumeRoleArn)
+
           putOnlineRecordsForPartition(
             partition,
             featureGroupName,
@@ -182,11 +192,11 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
     // MapPartitions and Map are lazily evaluated by spark, so action is needed here to ensure ingestion is executed
     // For more info: https://spark.apache.org/docs/latest/rdd-programming-guide.html#actions
-    val failedOnlineIngestionDataFrameSize = failedOnlineIngestionDataFrame.get.count()
+    val failedOnlineIngestionDataFrameSize = failedStreamIngestionDataFrame.get.count()
 
     if (failedOnlineIngestionDataFrameSize > 0) {
       throw StreamIngestionFailureException(
-        s"Stream ingestion finished, however ${failedOnlineIngestionDataFrameSize} records failed to be ingested. Please inspect FailedOnlineIngestionDataFrame for more info."
+        s"Stream ingestion finished, however ${failedOnlineIngestionDataFrameSize} records failed to be ingested. Please inspect failed stream ingestion data frame for more info."
       )
     }
   }
@@ -216,13 +226,15 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       })
 
       val errorMessage = Try {
-        val putRecordRequest = PutRecordRequest
+        val putRecordRequestBuilder = PutRecordRequest
           .builder()
           .featureGroupName(featureGroupName)
           .record(record.asJava)
-          .targetStores(targetStores.asJava)
-          .build()
-        runTimeClient.putRecord(putRecordRequest)
+
+        if (targetStores != null) {
+          putRecordRequestBuilder.targetStores(targetStores.asJava)
+        }
+        runTimeClient.putRecord(putRecordRequestBuilder.build())
       } match {
         case Success(value) => null
         case Failure(ex)    => ex.getMessage
@@ -250,32 +262,62 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val offlineStoreEncryptionKeyId =
       describeResponse.offlineStoreConfig().s3StorageConfig().kmsKeyId()
 
-    SparkSessionInitializer.initializeSparkSessionForOfflineStore(
-      dataFrame.sparkSession,
-      offlineStoreEncryptionKeyId,
-      assumeRoleArn,
-      region
-    )
-
     val destinationFilePath = generateDestinationFilePath(describeResponse)
     val tempDataFrame = dataFrame
-      .withColumn("temp_event_time_col", col(eventTimeFeatureName).cast("Timestamp"))
-      .withColumn("year", date_format(col("temp_event_time_col"), "yyyy"))
-      .withColumn("month", date_format(col("temp_event_time_col"), "MM"))
-      .withColumn("day", date_format(col("temp_event_time_col"), "dd"))
-      .withColumn("hour", date_format(col("temp_event_time_col"), "HH"))
       .withColumn("api_invocation_time", current_timestamp())
       .withColumn("write_time", current_timestamp())
       .withColumn("is_deleted", lit(false))
-      .drop("temp_event_time_col")
 
-    tempDataFrame
-      .repartition(col("year"), col("month"), col("day"), col("hour"))
-      .write
-      .partitionBy("year", "month", "day", "hour")
-      .option("compression", "none")
-      .mode("append")
-      .parquet(destinationFilePath)
+    if (isIcebergTableEnabled(describeResponse)) {
+      val resolvedOutputS3Uri = describeResponse.offlineStoreConfig().s3StorageConfig().resolvedOutputS3Uri()
+      val dataCatalogName     = describeResponse.offlineStoreConfig().dataCatalogConfig().catalog().toLowerCase()
+      val dataBaseName        = describeResponse.offlineStoreConfig().dataCatalogConfig().database().toLowerCase()
+      val tableName           = describeResponse.offlineStoreConfig().dataCatalogConfig().tableName().toLowerCase()
+
+      SparkSessionInitializer.initializeSparkSessionForIcebergTable(
+        dataFrame.sparkSession,
+        offlineStoreEncryptionKeyId,
+        resolvedOutputS3Uri,
+        dataCatalogName,
+        assumeRoleArn,
+        region
+      )
+
+      tempDataFrame
+        .repartition(trunc(col(eventTimeFeatureName), "yyyy-MM-dd"))
+        .sortWithinPartitions(col(eventTimeFeatureName))
+        .writeTo(f"$dataCatalogName.$dataBaseName.`$tableName`")
+        .option("compression", "none")
+        .append()
+    } else if (isGlueTableEnabled(describeResponse)) {
+      SparkSessionInitializer.initializeSparkSessionForOfflineStore(
+        dataFrame.sparkSession,
+        offlineStoreEncryptionKeyId,
+        assumeRoleArn,
+        region
+      )
+
+      val offlineDataFrame = tempDataFrame
+        .withColumn("temp_event_time_col", col(eventTimeFeatureName).cast("Timestamp"))
+        .withColumn("year", date_format(col("temp_event_time_col"), "yyyy"))
+        .withColumn("month", date_format(col("temp_event_time_col"), "MM"))
+        .withColumn("day", date_format(col("temp_event_time_col"), "dd"))
+        .withColumn("hour", date_format(col("temp_event_time_col"), "HH"))
+        .drop("temp_event_time_col")
+
+      offlineDataFrame
+        .repartition(col("year"), col("month"), col("day"), col("hour"))
+        .write
+        .partitionBy("year", "month", "day", "hour")
+        .option("compression", "none")
+        .mode("append")
+        .parquet(destinationFilePath)
+    } else {
+      val tableFormat = describeResponse.offlineStoreConfig().tableFormat()
+      throw new RuntimeException(
+        f"Invalid table format '$tableFormat' detected and is not supported by feature store spark connector"
+      )
+    }
   }
 
   private def getFeatureGroup(featureGroupName: String): DescribeFeatureGroupResponse = {

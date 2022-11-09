@@ -81,4 +81,48 @@ object SparkSessionInitializer {
         .set("fs.s3a.endpoint", s"s3.$region.amazonaws.com")
     }
   }
+
+  /** Initialize the spark session for offline store for iceberg table Fore more info:
+   *  https://iceberg.apache.org/docs/latest/aws/
+   *  @param sparkSession
+   *    Spark session to be initialized
+   *  @param offlineStoreEncryptionKmsKeyId
+   *    Kms key specified in offline store configuration of feature group
+   *  @param resolvedOutputS3Uri
+   *    Offline store s3 uri
+   *  @param assumeRoleArn
+   *    Role arn to be assumed for offline ingestion to iceberg table
+   *  @param region
+   *    Region
+   */
+  def initializeSparkSessionForIcebergTable(
+      sparkSession: SparkSession,
+      offlineStoreEncryptionKmsKeyId: String,
+      resolvedOutputS3Uri: String,
+      dataCatalogName: String,
+      assumeRoleArn: String,
+      region: String
+  ): Unit = {
+
+    if (offlineStoreEncryptionKmsKeyId != null) {
+      sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.s3.sse.key", offlineStoreEncryptionKmsKeyId)
+    }
+
+    if (assumeRoleArn != null) {
+      sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.client.assume-role.arn", assumeRoleArn)
+      sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.client.assume-role.region", region)
+      sparkSession.conf.set(
+        f"spark.sql.catalog.$dataCatalogName.client.factory",
+        "org.apache.iceberg.aws.AssumeRoleAwsClientFactory"
+      )
+    }
+
+    sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.s3.sse.type", "kms")
+    sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.warehouse", resolvedOutputS3Uri)
+    sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName", "org.apache.iceberg.spark.SparkCatalog")
+    sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
+    sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+    sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.glue.skip-name-validation", "true")
+    sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.glue.skip-archive", "true")
+  }
 }
