@@ -284,7 +284,6 @@ class FeatureStoreManager(assumeRoleArn: String = null, useGammaEndpoint: Boolea
       )
 
       tempDataFrame
-        .repartition(trunc(col(eventTimeFeatureName), "yyyy-MM-dd"))
         .sortWithinPartitions(col(eventTimeFeatureName))
         .writeTo(f"$dataCatalogName.$dataBaseName.`$tableName`")
         .option("compression", "none")
@@ -315,7 +314,7 @@ class FeatureStoreManager(assumeRoleArn: String = null, useGammaEndpoint: Boolea
     } else {
       val tableFormat = describeResponse.offlineStoreConfig().tableFormat()
       throw new RuntimeException(
-        f"Invalid table format '$tableFormat' detected and is not supported by feature store spark connector"
+        f"Invalid table format '$tableFormat' detected and is not supported by feature store spark connector."
       )
     }
   }
