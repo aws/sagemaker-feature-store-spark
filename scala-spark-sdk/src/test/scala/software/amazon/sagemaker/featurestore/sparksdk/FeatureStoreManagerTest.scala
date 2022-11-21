@@ -154,7 +154,8 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
   def ingestDataBatchOfflineStoreGlueTableTest(
       inputDataFrame: DataFrame,
       putRecordRequest: PutRecordRequest,
-      targetStores: List[String]
+      targetStores: List[String],
+      tableFormat: TableFormat
   ): Unit = {
     val resolvedOutputPath =
       TEST_ARTIFACT_ROOT + "/ingest-data-direct-offline-store-test/only-offline-store-enabled"
@@ -179,7 +180,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
       .offlineStoreConfig(
         OfflineStoreConfig
           .builder()
-          .tableFormat(TableFormat.GLUE)
+          .tableFormat(tableFormat)
           .s3StorageConfig(
             S3StorageConfig
               .builder()
@@ -385,28 +386,38 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
 
   @DataProvider
   def ingestDataBatchOfflineStoreGlueTableTestDataProvider(): Array[Array[Any]] = {
+    val inputTestDf = Seq(("identifier-1", "2021-05-06T05:12:14Z"))
+      .toDF("record-identifier", "event-time")
+    val expectedPutRecordRequest = PutRecordRequest
+      .builder()
+      .featureGroupName("test-feature-group")
+      .targetStores(List(TargetStore.OFFLINE_STORE).asJava)
+      .record(
+        FeatureValue
+          .builder()
+          .featureName("record-identifier")
+          .valueAsString("identifier-1")
+          .build(),
+        FeatureValue
+          .builder()
+          .featureName("event-time")
+          .valueAsString("2021-05-06T05:12:14Z")
+          .build()
+      )
+      .build()
+
     Array(
       Array(
-        Seq(("identifier-1", "2021-05-06T05:12:14Z"))
-          .toDF("record-identifier", "event-time"),
-        PutRecordRequest
-          .builder()
-          .featureGroupName("test-feature-group")
-          .targetStores(List(TargetStore.OFFLINE_STORE).asJava)
-          .record(
-            FeatureValue
-              .builder()
-              .featureName("record-identifier")
-              .valueAsString("identifier-1")
-              .build(),
-            FeatureValue
-              .builder()
-              .featureName("event-time")
-              .valueAsString("2021-05-06T05:12:14Z")
-              .build()
-          )
-          .build(),
-        List("OfflineStore")
+        inputTestDf,
+        expectedPutRecordRequest,
+        List("OfflineStore"),
+        TableFormat.GLUE
+      ),
+      Array(
+        inputTestDf,
+        expectedPutRecordRequest,
+        List("OfflineStore"),
+        null
       )
     )
   }

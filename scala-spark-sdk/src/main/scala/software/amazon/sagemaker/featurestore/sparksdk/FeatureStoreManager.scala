@@ -261,7 +261,7 @@ class FeatureStoreManager(assumeRoleArn: String = null, useGammaEndpoint: Boolea
 
     val offlineStoreEncryptionKeyId =
       describeResponse.offlineStoreConfig().s3StorageConfig().kmsKeyId()
-
+    val tableFormat         = describeResponse.offlineStoreConfig().tableFormat()
     val destinationFilePath = generateDestinationFilePath(describeResponse)
     val tempDataFrame = dataFrame
       .withColumn("api_invocation_time", current_timestamp())
@@ -288,7 +288,7 @@ class FeatureStoreManager(assumeRoleArn: String = null, useGammaEndpoint: Boolea
         .writeTo(f"$dataCatalogName.$dataBaseName.`$tableName`")
         .option("compression", "none")
         .append()
-    } else if (isGlueTableEnabled(describeResponse)) {
+    } else if (isGlueTableEnabled(describeResponse) || tableFormat == null) {
       SparkSessionInitializer.initializeSparkSessionForOfflineStore(
         dataFrame.sparkSession,
         offlineStoreEncryptionKeyId,

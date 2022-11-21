@@ -5,4 +5,4 @@ package software.amazon.sagemaker.featurestore.sparksdk.exceptions
  *  @param message
  *    Message describing the failure details.
  */
-case class StreamIngestionFailureException(message: String) extends RuntimeException(message)
+case class StreamIngestionFailureException(message: String) extends BaseException(message)

@@ -25,7 +25,8 @@ val majorSparkVersion = sparkVersion.substring(0, sparkVersion.lastIndexOf("."))
 val awsSDKVersion = "2.17.+"
 val sparkVersionToHadoopVersionMap = Map(
   "3.1" -> "3.2.1",
-  "3.2" -> "3.3.4"
+  "3.2" -> "3.2.1",
+  "3.3" -> "3.2.1",
 )
 
 // read the version number
