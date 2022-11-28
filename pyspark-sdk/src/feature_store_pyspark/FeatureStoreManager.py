@@ -27,9 +27,9 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
     """
     _wrapped_class = "software.amazon.sagemaker.featurestore.sparksdk.FeatureStoreManager"
 
-    def __init__(self, assume_role_arn: string = None, use_gamma_endpoint: bool = False):
+    def __init__(self, assume_role_arn: string = None):
         super(FeatureStoreManager, self).__init__()
-        self._java_obj = self._new_java_obj(FeatureStoreManager._wrapped_class, assume_role_arn, use_gamma_endpoint)
+        self._java_obj = self._new_java_obj(FeatureStoreManager._wrapped_class, assume_role_arn)
 
     def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: str, target_stores: List[str] = None):
         """

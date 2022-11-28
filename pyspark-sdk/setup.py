@@ -3,7 +3,6 @@ import os
 import shutil
 import sys
 import subprocess
-import pkg_resources
 
 from setuptools import setup
 from setuptools.command.install import install
@@ -30,6 +29,7 @@ def read(fname):
 def read_version():
     return read(VERSION_PATH).strip()
 
+
 # This is a post installation step. It will copy feature store spark uber jar to $SPARK_HOME/jars
 class CustomInstall(install):
     def run(self):
@@ -37,7 +37,7 @@ class CustomInstall(install):
         spark_home_dir = os.environ.get('SPARK_HOME', None)
         if spark_home_dir:
             uber_jar_target = Path(spark_home_dir) / "jars" / UBER_JAR_NAME
-            
+
             jars_in_deps = os.listdir(Path(os.getcwd()) / Path(JARS_TARGET))
             uber_jar_name = [jar for jar in jars_in_deps if jar.startswith(UBER_JAR_NAME_PREFIX)].pop()
             uber_jar_dir = Path(os.getcwd()) / Path(JARS_TARGET) / uber_jar_name
@@ -63,7 +63,7 @@ if in_spark_sdk:
                          stderr=subprocess.PIPE,
                          cwd=SCALA_SPARK_DIR)
     p.communicate()
-    
+
     # retrieve all jars under 'assembly-output'
     classpath = []
     assembly_output_dir = SCALA_SPARK_DIR / "assembly-output"
@@ -80,7 +80,7 @@ if in_spark_sdk:
     if not os.path.exists(JARS_TARGET):
         os.mkdir(JARS_TARGET)
 
-    uber_jar_path = [jar for jar in classpath if os.path.basename(jar).startswith(UBER_JAR_NAME_PREFIX)].pop()  
+    uber_jar_path = [jar for jar in classpath if os.path.basename(jar).startswith(UBER_JAR_NAME_PREFIX)].pop()
     target_path = os.path.join(JARS_TARGET, UBER_JAR_NAME)
     shutil.copy(uber_jar_path, target_path)
 

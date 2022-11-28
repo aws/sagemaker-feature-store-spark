@@ -30,7 +30,8 @@ import scala.collection.mutable.ListBuffer
  */
 object InputDataSchemaValidator {
 
-  val RESERVED_FEATURE_NAMES: Set[String] = Set("is_deleted", "write_time", "api_invocation_time")
+  val RESERVED_FEATURE_NAMES: Set[String] =
+    Set("is_deleted", "write_time", "api_invocation_time", "year", "month", "day", "hour", "temp_event_time_col")
   val TYPE_MAP: Map[String, String] =
     Map("Integral" -> "long", "String" -> "string", "Fractional" -> "double")
 

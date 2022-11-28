@@ -30,7 +30,8 @@ def test_feature_store_manager_methods():
 
         feature_store_manager.get_failed_stream_ingestion_data_frame()
         java_method_invocation.assert_called_with("getFailedStreamIngestionDataFrame")
-    
+
+
 def test_load_feature_definitions_from_schema():
     feature_store_manager = FeatureStoreManager()
     data = [(123, 123.0, "dummy")]

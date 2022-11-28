@@ -55,7 +55,7 @@ import java.util
 import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
-class FeatureStoreManager(assumeRoleArn: String = null, useGammaEndpoint: Boolean = false) extends Serializable {
+class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
   val SPARK_TYPE_TO_FEATURE_TYPE_MAP: Map[DataType, FeatureType] = Map(
     StringType  -> FeatureType.STRING,
@@ -86,7 +86,6 @@ class FeatureStoreManager(assumeRoleArn: String = null, useGammaEndpoint: Boolea
     val featureGroupName        = featureGroupArnResolver.resolveFeatureGroupName()
     val region                  = featureGroupArnResolver.resolveRegion()
 
-    ClientFactory.useGammaEndpoint = useGammaEndpoint
     ClientFactory.initialize(region = region, roleArn = assumeRoleArn)
 
     val describeResponse = getFeatureGroup(featureGroupName)
@@ -176,7 +175,6 @@ class FeatureStoreManager(assumeRoleArn: String = null, useGammaEndpoint: Boolea
     failedStreamIngestionDataFrame = Option(
       repartitionedDataFrame
         .mapPartitions(partition => {
-          ClientFactory.useGammaEndpoint = useGammaEndpoint
           ClientFactory.initialize(region, assumeRoleArn)
 
           putOnlineRecordsForPartition(
