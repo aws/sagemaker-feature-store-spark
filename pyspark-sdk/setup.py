@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import subprocess
+import pkg_resources
 
 from setuptools import setup
 from setuptools.command.install import install
@@ -12,7 +13,11 @@ SPARK_HOME = os.getenv('SPARK_HOME')
 TEMP_PATH = "deps"
 VERSION_PATH = "VERSION"
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
-in_spark_sdk = os.path.isfile("../scala-spark-sdk/build.sbt")
+SCALA_SPARK_DIR = Path("../scala-spark-sdk")
+UBER_JAR_NAME_PREFIX = "sagemaker-feature-store-spark-sdk"
+UBER_JAR_NAME = f"{UBER_JAR_NAME_PREFIX}.jar"
+
+in_spark_sdk = os.path.isfile(SCALA_SPARK_DIR / "build.sbt")
 # read the contents of your README file
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
@@ -25,17 +30,21 @@ def read(fname):
 def read_version():
     return read(VERSION_PATH).strip()
 
-
+# This is a post installation step. It will copy feature store spark uber jar to $SPARK_HOME/jars
 class CustomInstall(install):
     def run(self):
         install.run(self)
         spark_home_dir = os.environ.get('SPARK_HOME', None)
         if spark_home_dir:
-            print("Copying depdendent jars to SPARK_HOME...")
-            for jar in os.listdir(JARS_TARGET):
-                target_path = os.path.join(spark_home_dir, "jars", os.path.basename(jar))
-                source_path = os.path.join(JARS_TARGET, jar)
-                shutil.copy(source_path, target_path)
+            uber_jar_target = Path(spark_home_dir) / "jars" / UBER_JAR_NAME
+            
+            jars_in_deps = os.listdir(Path(os.getcwd()) / Path(JARS_TARGET))
+            uber_jar_name = [jar for jar in jars_in_deps if jar.startswith(UBER_JAR_NAME_PREFIX)].pop()
+            uber_jar_dir = Path(os.getcwd()) / Path(JARS_TARGET) / uber_jar_name
+
+            print(f"Copying feature store uber jar to {uber_jar_target}")
+            shutil.copy(uber_jar_dir, uber_jar_target)
+
         else:
             print("Environment variable SPARK_HOME is not set, dependent jars are not installed to SPARK_HOME.")
         print("Installation finished.")
@@ -47,22 +56,22 @@ if in_spark_sdk:
 
     if not os.path.exists(TEMP_PATH):
         os.mkdir(TEMP_PATH)
-    p = subprocess.Popen("sbt printClasspath".split(),
+
+    # use sbt to package the scala uber jar
+    p = subprocess.Popen("sbt assembly".split(),
                          stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE,
-                         cwd="../scala-spark-sdk/")
-
-    output, errors = p.communicate()
-
-    # Java Libraries to include.
-    java_libraries = ['aws', 'sagemaker', 'hadoop', 'reactive-streams', 'guava']
+                         cwd=SCALA_SPARK_DIR)
+    p.communicate()
+    
+    # retrieve all jars under 'assembly-output'
     classpath = []
-    for line in output.decode('utf-8').splitlines():
-        path = str(line.strip())
-        if path.endswith(".jar") and os.path.exists(path):
-            jar = os.path.basename(path).lower()
-            if any(lib in path for lib in java_libraries):
-                classpath.append(path)
+    assembly_output_dir = SCALA_SPARK_DIR / "assembly-output"
+    assembly_output_files = os.listdir(assembly_output_dir)
+    for output_file in assembly_output_files:
+        file_path = assembly_output_dir / output_file
+        if output_file.endswith(".jar") and os.path.exists(file_path):
+            classpath.append(file_path)
 
     if len(classpath) == 0:
         print("Failed to retrieve the jar classpath. Can't package")
@@ -70,9 +79,10 @@ if in_spark_sdk:
 
     if not os.path.exists(JARS_TARGET):
         os.mkdir(JARS_TARGET)
-    for jar in classpath:
-        target_path = os.path.join(JARS_TARGET, os.path.basename(jar))
-        shutil.copy(jar, target_path)
+
+    uber_jar_path = [jar for jar in classpath if os.path.basename(jar).startswith(UBER_JAR_NAME_PREFIX)].pop()  
+    target_path = os.path.join(JARS_TARGET, UBER_JAR_NAME)
+    shutil.copy(uber_jar_path, target_path)
 
 else:
     if not os.path.exists(JARS_TARGET):

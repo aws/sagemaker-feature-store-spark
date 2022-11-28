@@ -21,4 +21,4 @@ package software.amazon.sagemaker.featurestore.sparksdk.exceptions
  *  @param message
  *    Message describing the failure details.
  */
-case class ValidationError(message: String) extends BaseException(message)
+class BaseException(message: String) extends RuntimeException(message)

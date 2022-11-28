@@ -12,7 +12,7 @@
 # permissions and limitations under the License.
 
 import string
-
+from typing import List
 from pyspark.sql import DataFrame
 
 from feature_store_pyspark.wrapper import SageMakerFeatureStoreJavaWrapper
@@ -27,11 +27,11 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
     """
     _wrapped_class = "software.amazon.sagemaker.featurestore.sparksdk.FeatureStoreManager"
 
-    def __init__(self):
+    def __init__(self, assume_role_arn: string = None, use_gamma_endpoint: bool = False):
         super(FeatureStoreManager, self).__init__()
-        self._java_obj = self._new_java_obj(FeatureStoreManager._wrapped_class)
+        self._java_obj = self._new_java_obj(FeatureStoreManager._wrapped_class, assume_role_arn, use_gamma_endpoint)
 
-    def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: string, direct_offline_store=False):
+    def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: str, target_stores: List[str] = None):
         """
         Batch ingest data into SageMaker FeatureStore.
         :param input_data_frame: the data frame to be ingested
@@ -39,7 +39,7 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         :param direct_offline_store: boolean flag which specifies write data directlly to offline store
         :return:
         """
-        return self._call_java("ingestData", input_data_frame, feature_group_arn, direct_offline_store)
+        return self._call_java("ingestDataInJava", input_data_frame, feature_group_arn, target_stores)
 
     def load_feature_definitions_from_schema(self, input_data_frame: DataFrame):
         """
@@ -52,3 +52,10 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
             "FeatureName": definition.featureName(),
             "FeatureType": definition.featureType().toString()
         }, java_feature_definitions))
+
+    def get_failed_stream_ingestion_data_frame(self) -> DataFrame:
+        """
+        Retrieve data frame which inlcudes all records fail to bei ingested via ``ingest_data`` method.
+        :return: the data frame of records fail to ingest
+        """
+        return self._call_java("getFailedStreamIngestionDataFrame")

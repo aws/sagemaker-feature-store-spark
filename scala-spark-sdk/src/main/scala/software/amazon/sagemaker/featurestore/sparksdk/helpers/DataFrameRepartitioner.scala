@@ -27,7 +27,7 @@ object DataFrameRepartitioner {
     val configuredParallelism = sparkContext.getConf.get("spark.default.parallelism", null)
     val systemParallelism     = sparkContext.defaultParallelism
 
-    // Worship customer's configuration, else return the parallelism calculated from number of total cores
+    // Worship customer's configuration, else return the parallelism of default
     if (configuredParallelism != null) {
       configuredParallelism.toInt
     } else {
@@ -50,5 +50,4 @@ object DataFrameRepartitioner {
       inputDataFrame
     }
   }
-
 }
