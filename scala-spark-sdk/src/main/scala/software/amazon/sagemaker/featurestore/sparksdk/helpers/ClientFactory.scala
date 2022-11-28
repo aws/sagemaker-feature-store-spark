@@ -44,7 +44,6 @@ object ClientFactory {
   private var _sageMakerClient: Option[SageMakerClient]                                                     = None
   private var _sageMakerFeatureStoreRuntimeClientBuilder: Option[SageMakerFeatureStoreRuntimeClientBuilder] = None
   private var _skipInitialization: Boolean                                                                  = false
-  private var _useGammaEndpoint: Boolean                                                                    = false
 
   // Getters
   def sageMakerClient: SageMakerClient = _sageMakerClient.orNull
@@ -54,7 +53,6 @@ object ClientFactory {
   def region: String                                                     = _region.orNull
   def stsAssumeRoleCredentialsProvider: StsAssumeRoleCredentialsProvider = _stsAssumeRoleCredentialsProvider.orNull
   def skipInitialization: Boolean                                        = _skipInitialization
-  def useGammaEndpoint: Boolean                                          = _useGammaEndpoint
 
   // Setters
   @VisibleForTesting
@@ -72,8 +70,6 @@ object ClientFactory {
     _stsAssumeRoleCredentialsProvider = Option(credentialsProvider)
   @VisibleForTesting
   def skipInitialization_=(skipInitialization: Boolean): Unit = _skipInitialization = skipInitialization
-  @VisibleForTesting
-  def useGammaEndpoint_=(useGammaEndpoint: Boolean): Unit = _useGammaEndpoint = useGammaEndpoint
 
   /** Initialize the client factory
    *
@@ -105,12 +101,6 @@ object ClientFactory {
       sageMakerClientBuilder.credentialsProvider(stsAssumeRoleCredentialsProvider)
     }
 
-    if (_useGammaEndpoint) {
-      sageMakerClientBuilder.endpointOverride(
-        URI.create(f"https://api.sagemaker.gamma.$region.ml-platform.aws.a2z.com")
-      )
-    }
-
     sageMakerClientBuilder.build()
   }
 
@@ -129,12 +119,6 @@ object ClientFactory {
 
     if (_assumeRoleArn.nonEmpty) {
       sageMakerFeatureStoreRuntimeClient.credentialsProvider(stsAssumeRoleCredentialsProvider)
-    }
-
-    if (_useGammaEndpoint) {
-      sageMakerFeatureStoreRuntimeClient.endpointOverride(
-        URI.create(f"https://yavapai-runtime.gamma.$region.ml-platform.aws.a2z.com")
-      )
     }
 
     sageMakerFeatureStoreRuntimeClient
