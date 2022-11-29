@@ -3,7 +3,14 @@ package software.amazon.sagemaker.featurestore.sparksdk.helpers
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.assertEquals
 import org.testng.annotations.{DataProvider, Test}
-import software.amazon.awssdk.services.sagemaker.model.{DescribeFeatureGroupResponse, FeatureGroupStatus, OfflineStoreConfig, OnlineStoreConfig, S3StorageConfig, TableFormat}
+import software.amazon.awssdk.services.sagemaker.model.{
+  DescribeFeatureGroupResponse,
+  FeatureGroupStatus,
+  OfflineStoreConfig,
+  OnlineStoreConfig,
+  S3StorageConfig,
+  TableFormat
+}
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.TargetStore
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.ValidationError
 
@@ -37,12 +44,20 @@ class FeatureGroupHelperTest extends TestNGSuite {
   }
 
   @Test(dataProvider = "checkAndParseTargetStoreTestPositiveDataProvider")
-  def checkAndParseTargetStoreTest_positive(response: DescribeFeatureGroupResponse, targetStores: List[String], expectedTargetStores: List[TargetStore]): Unit = {
+  def checkAndParseTargetStoreTest_positive(
+      response: DescribeFeatureGroupResponse,
+      targetStores: List[String],
+      expectedTargetStores: List[TargetStore]
+  ): Unit = {
     assertEquals(FeatureGroupHelper.checkAndParseTargetStore(response, targetStores), expectedTargetStores)
   }
 
   @Test(dataProvider = "checkAndParseTargetStoreTestNegativeDataProvider")
-  def checkAndParseTargetStoreTest_negative(response: DescribeFeatureGroupResponse, targetStores: List[String], expectedErrorMessage: String): Unit = {
+  def checkAndParseTargetStoreTest_negative(
+      response: DescribeFeatureGroupResponse,
+      targetStores: List[String],
+      expectedErrorMessage: String
+  ): Unit = {
     val caught = intercept[ValidationError] {
       FeatureGroupHelper.checkAndParseTargetStore(response, targetStores)
     }
@@ -50,7 +65,10 @@ class FeatureGroupHelperTest extends TestNGSuite {
   }
 
   @Test(dataProvider = "retrieveTargetStoresFromFeatureGroupTestDataProvider")
-  def retrieveTargetStoresFromFeatureGroupTest(response: DescribeFeatureGroupResponse, expectedTargetStores: List[TargetStore]): Unit = {
+  def retrieveTargetStoresFromFeatureGroupTest(
+      response: DescribeFeatureGroupResponse,
+      expectedTargetStores: List[TargetStore]
+  ): Unit = {
     val retrievedStores = FeatureGroupHelper.retrieveTargetStoresFromFeatureGroup(response)
 
     assertEquals(retrievedStores, expectedTargetStores)
@@ -168,23 +186,40 @@ class FeatureGroupHelperTest extends TestNGSuite {
     Array(
       Array(response, List("OnlineStore"), List(TargetStore.ONLINE_STORE)),
       Array(response, List("OfflineStore"), List(TargetStore.OFFLINE_STORE)),
-      Array(response, List("OnlineStore", "OfflineStore"), List(TargetStore.ONLINE_STORE, TargetStore.OFFLINE_STORE)),
+      Array(response, List("OnlineStore", "OfflineStore"), List(TargetStore.ONLINE_STORE, TargetStore.OFFLINE_STORE))
     )
   }
 
   @DataProvider
   def checkAndParseTargetStoreTestNegativeDataProvider(): Array[Array[Any]] = {
 
-    val response = DescribeFeatureGroupResponse.builder()
+    val response = DescribeFeatureGroupResponse
+      .builder()
       .featureGroupName("test-fg-name")
       .build()
 
     Array(
-      Array(response, List("OnlineStore"), "[OnlineStore] of FeatureGroup: 'test-fg-name' are not enabled, however they are specified in target store."),
-      Array(response, List("OfflineStore"), "[OfflineStore] of FeatureGroup: 'test-fg-name' are not enabled, however they are specified in target store."),
+      Array(
+        response,
+        List("OnlineStore"),
+        "[OnlineStore] of FeatureGroup: 'test-fg-name' are not enabled, however they are specified in target store."
+      ),
+      Array(
+        response,
+        List("OfflineStore"),
+        "[OfflineStore] of FeatureGroup: 'test-fg-name' are not enabled, however they are specified in target store."
+      ),
       Array(response, List(null), "Found unknown target store, the valid values are [OnlineStore, OfflineStore]."),
-      Array(response, List("invalid-store"), "Found unknown target store, the valid values are [OnlineStore, OfflineStore]."),
-      Array(response, List(), "Target stores cannot be empty, please provide at least one target store or leave it unspecified."),
+      Array(
+        response,
+        List("invalid-store"),
+        "Found unknown target store, the valid values are [OnlineStore, OfflineStore]."
+      ),
+      Array(
+        response,
+        List(),
+        "Target stores cannot be empty, please provide at least one target store or leave it unspecified."
+      )
     )
   }
 
@@ -192,38 +227,46 @@ class FeatureGroupHelperTest extends TestNGSuite {
   def retrieveTargetStoresFromFeatureGroupTestDataProvider(): Array[Array[Any]] = {
 
     Array(
-      Array(DescribeFeatureGroupResponse
-        .builder()
-        .onlineStoreConfig(
-          OnlineStoreConfig
-            .builder()
-            .enableOnlineStore(true)
-            .build())
-        .build(),
+      Array(
+        DescribeFeatureGroupResponse
+          .builder()
+          .onlineStoreConfig(
+            OnlineStoreConfig
+              .builder()
+              .enableOnlineStore(true)
+              .build()
+          )
+          .build(),
         List(TargetStore.ONLINE_STORE)
       ),
-      Array(DescribeFeatureGroupResponse
-        .builder()
-        .offlineStoreConfig(
-          OfflineStoreConfig.builder()
-            .s3StorageConfig(S3StorageConfig.builder().build())
-            .build()
-        )
-        .build(),
+      Array(
+        DescribeFeatureGroupResponse
+          .builder()
+          .offlineStoreConfig(
+            OfflineStoreConfig
+              .builder()
+              .s3StorageConfig(S3StorageConfig.builder().build())
+              .build()
+          )
+          .build(),
         List(TargetStore.OFFLINE_STORE)
       ),
-      Array(DescribeFeatureGroupResponse
-        .builder()
-        .onlineStoreConfig(
-          OnlineStoreConfig
-            .builder()
-            .enableOnlineStore(true)
-            .build())
-        .offlineStoreConfig(
-          OfflineStoreConfig.builder()
-            .s3StorageConfig(S3StorageConfig.builder().build())
-            .build())
-        .build(),
+      Array(
+        DescribeFeatureGroupResponse
+          .builder()
+          .onlineStoreConfig(
+            OnlineStoreConfig
+              .builder()
+              .enableOnlineStore(true)
+              .build()
+          )
+          .offlineStoreConfig(
+            OfflineStoreConfig
+              .builder()
+              .s3StorageConfig(S3StorageConfig.builder().build())
+              .build()
+          )
+          .build(),
         List(TargetStore.ONLINE_STORE, TargetStore.OFFLINE_STORE)
       )
     )
@@ -232,8 +275,20 @@ class FeatureGroupHelperTest extends TestNGSuite {
   @DataProvider
   def isIcebergTableEnabledTestDataProvider(): Array[Array[Any]] = {
     Array(
-      Array(DescribeFeatureGroupResponse.builder().offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.ICEBERG).build()).build(), true),
-      Array(DescribeFeatureGroupResponse.builder().offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.GLUE).build()).build(), false),
+      Array(
+        DescribeFeatureGroupResponse
+          .builder()
+          .offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.ICEBERG).build())
+          .build(),
+        true
+      ),
+      Array(
+        DescribeFeatureGroupResponse
+          .builder()
+          .offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.GLUE).build())
+          .build(),
+        false
+      ),
       Array(DescribeFeatureGroupResponse.builder().build(), false)
     )
   }
@@ -241,8 +296,20 @@ class FeatureGroupHelperTest extends TestNGSuite {
   @DataProvider
   def isGlueTableEnabledTestDataProvider(): Array[Array[Any]] = {
     Array(
-      Array(DescribeFeatureGroupResponse.builder().offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.ICEBERG).build()).build(), false),
-      Array(DescribeFeatureGroupResponse.builder().offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.GLUE).build()).build(), true),
+      Array(
+        DescribeFeatureGroupResponse
+          .builder()
+          .offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.ICEBERG).build())
+          .build(),
+        false
+      ),
+      Array(
+        DescribeFeatureGroupResponse
+          .builder()
+          .offlineStoreConfig(OfflineStoreConfig.builder().tableFormat(TableFormat.GLUE).build())
+          .build(),
+        true
+      ),
       Array(DescribeFeatureGroupResponse.builder().build(), false)
     )
   }

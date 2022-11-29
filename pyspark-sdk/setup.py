@@ -90,10 +90,12 @@ else:
         exit(-1)
 
 setup(
-    name="sagemaker_feature_store_pyspark",
+    name="sagemaker_feature_store_pyspark_3.1",
+    author="Amazon Web Services",
 
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
+    keywords="ML Amazon AWS AI FeatureStore SageMaker",
 
     version=read_version(),
     description="Amazon SageMaker FeatureStore PySpark Bindings",
