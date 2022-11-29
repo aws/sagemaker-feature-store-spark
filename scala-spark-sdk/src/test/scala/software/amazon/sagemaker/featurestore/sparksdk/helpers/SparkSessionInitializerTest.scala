@@ -92,11 +92,13 @@ class SparkSessionInitializerTest extends TestNGSuite {
   }
 
   @Test(dataProvider = "initializeSparkSessionForIcebergTableDataProvider")
-  def initializeSparkSessionForIcebergTableTest(offlineStoreEncryptionKmsKeyId: String,
-                                                resolvedOutputS3Uri: String,
-                                                dataCatalogName: String,
-                                                assumeRoleArn: String,
-                                                region: String): Unit = {
+  def initializeSparkSessionForIcebergTableTest(
+      offlineStoreEncryptionKmsKeyId: String,
+      resolvedOutputS3Uri: String,
+      dataCatalogName: String,
+      assumeRoleArn: String,
+      region: String
+  ): Unit = {
 
     SparkSessionInitializer.initializeSparkSessionForIcebergTable(
       sparkSession,
@@ -108,21 +110,33 @@ class SparkSessionInitializerTest extends TestNGSuite {
     )
 
     if (offlineStoreEncryptionKmsKeyId != null) {
-      assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.s3.sse.key"), offlineStoreEncryptionKmsKeyId)
+      assertEquals(
+        sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.s3.sse.key"),
+        offlineStoreEncryptionKmsKeyId
+      )
     }
 
     if (assumeRoleArn != null) {
       assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.client.assume-role.arn"), assumeRoleArn)
       assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.client.assume-role.region"), region)
-      assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.client.factory"), "org.apache.iceberg.aws.AssumeRoleAwsClientFactory")
+      assertEquals(
+        sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.client.factory"),
+        "org.apache.iceberg.aws.AssumeRoleAwsClientFactory"
+      )
     }
 
     assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.s3.sse.type"), "kms")
     assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.warehouse"), resolvedOutputS3Uri)
 
     assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName"), "org.apache.iceberg.spark.SparkCatalog")
-    assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.catalog-impl"), "org.apache.iceberg.aws.glue.GlueCatalog")
-    assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.io-impl"), "org.apache.iceberg.aws.s3.S3FileIO")
+    assertEquals(
+      sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.catalog-impl"),
+      "org.apache.iceberg.aws.glue.GlueCatalog"
+    )
+    assertEquals(
+      sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.io-impl"),
+      "org.apache.iceberg.aws.s3.S3FileIO"
+    )
     assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.glue.skip-name-validation"), "true")
     assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.glue.skip-archive"), "true")
   }
@@ -141,7 +155,7 @@ class SparkSessionInitializerTest extends TestNGSuite {
     Array(
       Array("offline-store-kms-key-id", "s3-uri", "aws", null, "us-west-2"),
       Array(null, "s3-uri", "aws", "test-role-arn", "us-west-2"),
-      Array("offline-store-kms-key-id", "s3-uri", "aws", "test-role-arn", "us-west-2"),
+      Array("offline-store-kms-key-id", "s3-uri", "aws", "test-role-arn", "us-west-2")
     )
   }
 }
