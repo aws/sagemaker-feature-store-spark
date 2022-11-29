@@ -140,14 +140,14 @@ object InputDataSchemaValidator {
     // Verify there is no unknown column.
     if (unknown_columns.nonEmpty) {
       throw ValidationError(
-        s"Cannot proceed. Schema contains unknown columns: '$unknown_columns'"
+        s"Cannot proceed. Schema contains unknown columns: '${unknown_columns.mkString(",")}'"
       )
     }
 
     // Verify all required feature names are present in schema.
     if (missingRequiredFeatureNames.nonEmpty) {
       throw ValidationError(
-        s"Cannot proceed. Missing feature names '$missingRequiredFeatureNames' in schema."
+        s"Cannot proceed. Missing feature names '${missingRequiredFeatureNames.mkString(",")}' in schema."
       )
     }
   }
