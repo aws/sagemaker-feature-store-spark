@@ -7,7 +7,7 @@ phases:
       java: openjdk8
     commands:
       - pip3 install tox
-
+      - pip3 install --upgrade boto3
   pre_build:
     commands:
       - export SBT_OPTS="-XX:MaxMetaspaceSize=1024M"
