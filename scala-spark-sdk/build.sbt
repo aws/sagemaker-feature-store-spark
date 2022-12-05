@@ -22,7 +22,7 @@ lazy val SageMakerFeatureStoreSpark = (project in file(".")).settings(
 val sparkVersion = System.getProperty("SPARK_VERSION", "3.1.2")
 val majorSparkVersion = sparkVersion.substring(0, sparkVersion.lastIndexOf("."))
 
-val awsSDKVersion = "2.17.+"
+val awsSDKVersion = "2.18.28"
 val sparkVersionToHadoopVersionMap = Map(
   "3.1" -> "3.2.1",
   "3.2" -> "3.2.1",
@@ -40,7 +40,7 @@ scalaVersion := "2.12.8"
 libraryDependencies ++= Seq(
   // SDK v2 is required by iceberg and spark connector. Since some platforms do not provide these dependencies, we
   // pack them up and provide for users
-  //  "software.amazon.awssdk" % "sagemaker" % awsSDKVersion,
+  "software.amazon.awssdk" % "sagemaker" % awsSDKVersion,
   //  "software.amazon.awssdk" % "sagemakerfeaturestoreruntime" % awsSDKVersion,
 
   "software.amazon.awssdk" % "glue" % awsSDKVersion,
