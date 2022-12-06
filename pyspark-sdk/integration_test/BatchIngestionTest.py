@@ -7,18 +7,12 @@ import unittest
 
 from datetime import datetime
 
-try:
-    import boto3
-except ModuleNotFoundError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "boto3==1.26.20"])
-    print("Installed boto3 in current environment.")
-
 SPARK_HOME = "/usr/lib/spark"
 sys.path.append(f'{SPARK_HOME}/python')
 sys.path.append(f'{SPARK_HOME}/python/build')
 sys.path.append(f'{SPARK_HOME}/python/lib/py4j-src.zip')
 sys.path.append(f'{SPARK_HOME}/python/pyspark')
-sys.path.append(os.path.join(sys.path[0], "sagemaker_feature_store_pyspark_3.1.zip"))
+sys.path.append(os.path.join(sys.path[0], "sagemaker_feature_store_pyspark.zip"))
 
 import boto3
 import feature_store_pyspark
