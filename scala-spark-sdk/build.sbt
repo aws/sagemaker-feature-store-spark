@@ -22,7 +22,7 @@ lazy val SageMakerFeatureStoreSpark = (project in file(".")).settings(
 val sparkVersion = System.getProperty("SPARK_VERSION", "3.1.2")
 val majorSparkVersion = sparkVersion.substring(0, sparkVersion.lastIndexOf("."))
 
-val awsSDKVersion = "2.18.28"
+val awsSDKVersion = "2.18.32"
 val sparkVersionToHadoopVersionMap = Map(
   "3.1" -> "3.2.1",
   "3.2" -> "3.2.1",
@@ -41,7 +41,7 @@ libraryDependencies ++= Seq(
   // SDK v2 is required by iceberg and spark connector. Since some platforms do not provide these dependencies, we
   // pack them up and provide for users
   "software.amazon.awssdk" % "sagemaker" % awsSDKVersion,
-  //  "software.amazon.awssdk" % "sagemakerfeaturestoreruntime" % awsSDKVersion,
+  "software.amazon.awssdk" % "sagemakerfeaturestoreruntime" % awsSDKVersion,
 
   "software.amazon.awssdk" % "glue" % awsSDKVersion,
   "software.amazon.awssdk" % "s3" % awsSDKVersion,
@@ -50,7 +50,7 @@ libraryDependencies ++= Seq(
   "software.amazon.awssdk" % "sts" % awsSDKVersion,
   "software.amazon.awssdk" % "url-connection-client" % awsSDKVersion,
 
-  "org.apache.iceberg" %% s"iceberg-spark-runtime-$majorSparkVersion" % "0.14.+",
+  "org.apache.iceberg" %% s"iceberg-spark-runtime-$majorSparkVersion" % "0.14.+" % Provided,
 
   // hadoop-common and hadoop-aws should be provided by either platform or user. On EMR, sagemaker processing these are
   // pre-installed, to avoid dependency conflict which could cause weird failures, we exclude them from fat jar. Besides
