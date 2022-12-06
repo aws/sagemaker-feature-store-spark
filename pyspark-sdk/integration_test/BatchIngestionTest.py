@@ -20,6 +20,7 @@ from feature_store_pyspark.FeatureStoreManager import FeatureStoreManager
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import lit, col
 from pyspark.sql.types import Row
+from datetime import datetime
 
 # Import the required jars run the application
 jars = ",".join(feature_store_pyspark.classpath_jars())
@@ -42,9 +43,9 @@ identity_data_object = s3_client.get_object(
 )
 csv_data = spark.sparkContext.parallelize(identity_data_object["Body"].read().decode("utf-8").split('\r\n'))
 timestamp_suffix = time.strftime("%d-%H-%M-%S", time.gmtime())
-test_feature_group_name_online_only = 'spark-test-online-only' + timestamp_suffix
-test_feature_group_name_glue_table = 'spark-test-glue' + timestamp_suffix
-test_feature_group_name_iceberg_table = 'spark-test-online-only' + timestamp_suffix
+test_feature_group_name_online_only = 'spark-test-online-only-' + timestamp_suffix
+test_feature_group_name_glue_table = 'spark-test-glue-' + timestamp_suffix
+test_feature_group_name_iceberg_table = 'spark-test-online-only-' + timestamp_suffix
 
 
 def clean_up(feature_group_name):
@@ -59,9 +60,12 @@ atexit.register(clean_up, test_feature_group_name_iceberg_table)
 feature_store_manager = FeatureStoreManager(f"arn:aws:iam::{account_id}:role/feature-store-role")
 
 # For testing purpose, we only get 1 record from dataset and persist it to feature store
-current_time = time.time()
+
+current_timestamp = time.time()
+current_date = datetime.now()
+current_time = current_date.strftime('%Y-%m-%dT%H:%M:%SZ')
 identity_df = spark.read.options(header='True', inferSchema='True').csv(csv_data).limit(20).cache()
-identity_df = identity_df.withColumn("EventTime", lit(current_time).cast("double"))
+identity_df = identity_df.withColumn("EventTime", lit(current_time))
 
 feature_definitions = feature_store_manager.load_feature_definitions_from_schema(identity_df)
 
@@ -139,7 +143,7 @@ resolved_output_s3_uri = sagemaker_client.describe_feature_group(
     FeatureGroupName=test_feature_group_name_glue_table
 ).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri").replace("s3", "s3a", 1)
 
-event_time_date = datetime.fromtimestamp(current_time)
+event_time_date = datetime.fromtimestamp(current_timestamp)
 
 partitioned_s3_path = '/'.join([resolved_output_s3_uri,
                              f"year={event_time_date.strftime('%Y')}",
