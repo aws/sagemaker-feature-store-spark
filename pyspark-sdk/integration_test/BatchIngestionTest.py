@@ -195,7 +195,7 @@ wait_for_feature_group_creation_complete(test_feature_group_name_iceberg_table)
 feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_arn=response.get("FeatureGroupArn"), target_stores=["OfflineStore"])
 
 resolved_output_s3_uri = sagemaker_client.describe_feature_group(
-    FeatureGroupName=test_feature_group_name_glue_table
+    FeatureGroupName=test_feature_group_name_iceberg_table
 ).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri").replace("s3", "s3a", 1)
 
 s3 = boto3.client('s3')
