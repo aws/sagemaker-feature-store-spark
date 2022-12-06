@@ -199,13 +199,13 @@ resolved_output_s3_uri = sagemaker_client.describe_feature_group(
 ).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri").replace("s3", "s3a", 1)
 
 s3 = boto3.client('s3')
-object_listing = s3.list_objects_v2(Bucket='pyspark-connector-dbg',
-                                    Prefix='data/')
+# object_listing = s3.list_objects_v2(Bucket='pyspark-connector-dbg',
+#                                     Prefix='data/')
 
 
 # object_list = list(filter(lambda entry: f"EventTime_trunc={event_time_date.strftime('%Y-%m-%d')}" in entry['Key'], object_listing['Contents']))
 # tc.assertEqual(len(object_list), 1)
-offline_store_df = spark.read.format("parquet").load(f"s3a://spark-test-bucket-{account_id}/object_list[0]['Key']")
+offline_store_df = spark.read.format("parquet").load(resolved_output_s3_uri)
 
 # verify the values and appeneded columns are persisted correctly
 for row in identity_df.collect():
