@@ -45,7 +45,7 @@ csv_data = spark.sparkContext.parallelize(identity_data_object["Body"].read().de
 timestamp_suffix = time.strftime("%d-%H-%M-%S", time.gmtime())
 test_feature_group_name_online_only = 'spark-test-online-only-' + timestamp_suffix
 test_feature_group_name_glue_table = 'spark-test-glue-' + timestamp_suffix
-test_feature_group_name_iceberg_table = 'spark-test-online-only-' + timestamp_suffix
+test_feature_group_name_iceberg_table = 'spark-test-iceberg-' + timestamp_suffix
 
 
 def clean_up(feature_group_name):
