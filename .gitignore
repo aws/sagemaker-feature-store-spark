@@ -15,3 +15,7 @@ pyspark-sdk/tests/__pycache__/
 project
 target
 pyspark-sdk/VERSION
+pyspark-sdk/build
+derby.log
+metastore_db
+pyspark-sdk/sagemaker_feature_store_pyspark*.egg-info
