@@ -141,7 +141,7 @@ feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_ar
 
 resolved_output_s3_uri = sagemaker_client.describe_feature_group(
     FeatureGroupName=test_feature_group_name_glue_table
-).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri").replace("s3", "s3a", 1)
+).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri")
 
 event_time_date = datetime.fromtimestamp(current_timestamp)
 
@@ -196,16 +196,16 @@ feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_ar
 
 resolved_output_s3_uri = sagemaker_client.describe_feature_group(
     FeatureGroupName=test_feature_group_name_iceberg_table
-).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri").replace("s3", "s3a", 1)
+).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri")
 
 s3 = boto3.client('s3')
-# object_listing = s3.list_objects_v2(Bucket='pyspark-connector-dbg',
-#                                     Prefix='data/')
+object_listing = s3.list_objects_v2(Bucket=f'spark-test-bucket-{account_id}',
+                                    Prefix=resolved_output_s3_uri.replace(f's3://spark-test-bucket-{account_id}/', '', 1))
 
 
-# object_list = list(filter(lambda entry: f"EventTime_trunc={event_time_date.strftime('%Y-%m-%d')}" in entry['Key'], object_listing['Contents']))
-# tc.assertEqual(len(object_list), 1)
-offline_store_df = spark.read.format("parquet").load(resolved_output_s3_uri)
+object_list = list(filter(lambda entry: f"EventTime_trunc={event_time_date.strftime('%Y-%m-%d')}" in entry['Key'], object_listing['Contents']))
+tc.assertEqual(len(object_list), 1)
+offline_store_df = spark.read.format("parquet").load('/'.join(f's3://spark-test-bucket-{account_id}', object_list[0]['Key']))
 
 # verify the values and appeneded columns are persisted correctly
 for row in identity_df.collect():
