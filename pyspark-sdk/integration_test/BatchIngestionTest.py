@@ -10,7 +10,7 @@ from datetime import datetime
 try:
     import boto3
 except ModuleNotFoundError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "boto3"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "boto3==1.26.20"])
     print("Installed boto3 in current environment.")
 
 SPARK_HOME = "/usr/lib/spark"
@@ -18,7 +18,7 @@ sys.path.append(f'{SPARK_HOME}/python')
 sys.path.append(f'{SPARK_HOME}/python/build')
 sys.path.append(f'{SPARK_HOME}/python/lib/py4j-src.zip')
 sys.path.append(f'{SPARK_HOME}/python/pyspark')
-sys.path.append(os.path.join(sys.path[0], "sagemaker_feature_store_pyspark.zip"))
+sys.path.append(os.path.join(sys.path[0], "sagemaker_feature_store_pyspark_3.1.zip"))
 
 import boto3
 import feature_store_pyspark
@@ -47,7 +47,10 @@ identity_data_object = s3_client.get_object(
     Bucket=fraud_detection_bucket_name, Key=identity_file_key
 )
 csv_data = spark.sparkContext.parallelize(identity_data_object["Body"].read().decode("utf-8").split('\r\n'))
-test_feature_group_name = 'sagemaker-feature-store-spark-test' + time.strftime("%d-%H-%M-%S", time.gmtime())
+timestamp_suffix = time.strftime("%d-%H-%M-%S", time.gmtime())
+test_feature_group_name_online_only = 'spark-test-online-only' + timestamp_suffix
+test_feature_group_name_glue_table = 'spark-test-glue' + timestamp_suffix
+test_feature_group_name_iceberg_table = 'spark-test-online-only' + timestamp_suffix
 
 
 def clean_up(feature_group_name):
@@ -55,9 +58,11 @@ def clean_up(feature_group_name):
     print(f"Deleted feature group: {feature_group_name}")
 
 
-atexit.register(clean_up, test_feature_group_name)
+atexit.register(clean_up, test_feature_group_name_online_only)
+atexit.register(clean_up, test_feature_group_name_glue_table)
+atexit.register(clean_up, test_feature_group_name_iceberg_table)
 
-feature_store_manager = FeatureStoreManager()
+feature_store_manager = FeatureStoreManager(f"arn:aws:iam::{account_id}:role/feature-store-role")
 
 # For testing purpose, we only get 1 record from dataset and persist it to feature store
 current_time = time.time()
@@ -76,9 +81,46 @@ def wait_for_feature_group_creation_complete(feature_group_name):
     if status != "Created":
         raise RuntimeError(f"Failed to create feature group {feature_group_name}")
 
-
+# Create a feature group with only online store enabled
 response = sagemaker_client.create_feature_group(
-    FeatureGroupName=test_feature_group_name,
+    FeatureGroupName=test_feature_group_name_online_only,
+    RecordIdentifierFeatureName='TransactionID',
+    EventTimeFeatureName='EventTime',
+    FeatureDefinitions=feature_definitions,
+    OnlineStoreConfig={
+        'EnableOnlineStore': True
+    }
+)
+
+wait_for_feature_group_creation_complete(test_feature_group_name_online_only)
+
+# Test1: Stream ingest to a feature group with only online store enabled
+feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_arn=response.get("FeatureGroupArn"), target_stores=["OnlineStore"])
+
+def verify_online_record(ingested_row: Row, record_dict: dict):
+    ingested_row_dict = ingested_row.asDict()
+    for key in ingested_row_dict.keys():
+        ingested_value = ingested_row_dict.get(key, None)
+        filterd_record_list = list(filter(lambda feature_value: feature_value["FeatureName"] == key, record_dict))
+        if ingested_value is not None:
+            filterd_record = filterd_record_list[0]
+            tc.assertEqual(str(ingested_row_dict[key]), filterd_record["ValueAsString"])
+        else:
+            tc.assertEqual(len(filterd_record_list), 0)
+
+
+for row in identity_df.collect():
+    get_record_response = featurestore_runtime.get_record(
+        FeatureGroupName=test_feature_group_name,
+        RecordIdentifierValueAsString=str(row["TransactionID"]),
+    )
+    record = get_record_response["Record"]
+    verify_online_record(row, record)
+
+
+# Create a feature group with Glue table enabled
+response = sagemaker_client.create_feature_group(
+    FeatureGroupName=test_feature_group_name_glue_table,
     RecordIdentifierFeatureName='TransactionID',
     EventTimeFeatureName='EventTime',
     FeatureDefinitions=feature_definitions,
@@ -88,19 +130,19 @@ response = sagemaker_client.create_feature_group(
     OfflineStoreConfig={
         'S3StorageConfig': {
             'S3Uri': f's3://spark-test-bucket-{account_id}/test-offline-store'
-        }
+        },
+        'TableFormat': 'Glue'
     },
     RoleArn=f"arn:aws:iam::{account_id}:role/feature-store-role"
 )
 
-wait_for_feature_group_creation_complete(test_feature_group_name)
+wait_for_feature_group_creation_complete(test_feature_group_name_glue_table)
 
-# offline store direct ingest
-feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_arn=response.get("FeatureGroupArn"),
-                                  direct_offline_store=True)
+# Test2: Batch ingest to offline store with glue table enabled
+feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_arn=response.get("FeatureGroupArn"), target_stores=["OfflineStore"])
 
 resolved_output_s3_uri = sagemaker_client.describe_feature_group(
-    FeatureGroupName=test_feature_group_name
+    FeatureGroupName=test_feature_group_name_glue_table
 ).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri").replace("s3", "s3a", 1)
 
 event_time_date = datetime.fromtimestamp(current_time)
@@ -131,27 +173,47 @@ for row in identity_df.collect():
     tc.assertEqual(offline_store_filtered_df.drop(*appended_colums).first(), row)
     verify_appended_columns(offline_store_filtered_df.first())
 
-# online store ingest
-feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_arn=response.get("FeatureGroupArn"),
-                                  direct_offline_store=False)
+# Create a feature group with Iceberg table enabled
+response = sagemaker_client.create_feature_group(
+    FeatureGroupName=test_feature_group_name_iceberg_table,
+    RecordIdentifierFeatureName='TransactionID',
+    EventTimeFeatureName='EventTime',
+    FeatureDefinitions=feature_definitions,
+    OnlineStoreConfig={
+        'EnableOnlineStore': True
+    },
+    OfflineStoreConfig={
+        'S3StorageConfig': {
+            'S3Uri': f's3://spark-test-bucket-{account_id}/test-offline-store'
+        },
+        'TableFormat': 'Iceberg'
+    },
+    RoleArn=f"arn:aws:iam::{account_id}:role/feature-store-role"
+)
 
-def verify_online_record(ingested_row: Row, record_dict: dict):
-    ingested_row_dict = ingested_row.asDict()
-    for key in ingested_row_dict.keys():
-        ingested_value = ingested_row_dict.get(key, None)
-        filterd_record_list = list(filter(lambda feature_value: feature_value["FeatureName"] == key, record_dict))
-        if ingested_value is not None:
-            filterd_record = filterd_record_list[0]
-            tc.assertEqual(str(ingested_row_dict[key]), filterd_record["ValueAsString"])
-        else:
-            tc.assertEqual(len(filterd_record_list), 0)
+wait_for_feature_group_creation_complete(test_feature_group_name_iceberg_table)
 
+# Test3: Batch ingest to offline store with ice table enabled
+feature_store_manager.ingest_data(input_data_frame=identity_df, feature_group_arn=response.get("FeatureGroupArn"), target_stores=["OfflineStore"])
+
+resolved_output_s3_uri = sagemaker_client.describe_feature_group(
+    FeatureGroupName=test_feature_group_name_glue_table
+).get("OfflineStoreConfig").get("S3StorageConfig").get("ResolvedOutputS3Uri").replace("s3", "s3a", 1)
+
+s3 = boto3.client('s3')
+object_listing = s3.list_objects_v2(Bucket='pyspark-connector-dbg',
+                                    Prefix='data/')
+
+
+object_list = list(filter(lambda entry: f"EventTime_trunc={event_time_date.strftime('%Y-%m-%d')}" in entry['Key'], object_listing['Contents']))
+tc.assertEqual(len(object_list), 1)
+offline_store_df = spark.read.format("parquet").load(f"s3a://spark-test-bucket-{account_id}/object_list[0]['Key']")
+
+# verify the values and appeneded columns are persisted correctly
 for row in identity_df.collect():
-    get_record_response = featurestore_runtime.get_record(
-        FeatureGroupName=test_feature_group_name,
-        RecordIdentifierValueAsString=str(row["TransactionID"]),
+    offline_store_filtered_df = offline_store_df.filter(
+        col("TransactionID").cast("string") == str(row["TransactionID"])
     )
-    record = get_record_response["Record"]
-    verify_online_record(row, record)
-
-
+    tc.assertTrue(offline_store_filtered_df.count() == 1)
+    tc.assertEqual(offline_store_filtered_df.drop(*appended_colums).first(), row)
+    verify_appended_columns(offline_store_filtered_df.first())

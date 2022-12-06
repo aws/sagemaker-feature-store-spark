@@ -4,13 +4,6 @@ import subprocess
 import os
 import sys
 import time
-
-try:
-    import boto3
-except ModuleNotFoundError:
-    subprocess.check_call([sys.executable, "-m", "pip3", "install", "boto3"])
-    print("Installed boto3 in current environment.")
-
 import boto3
 
 DIST_DIR = "../dist"
@@ -67,6 +60,7 @@ step_ids = emr_client.add_job_flow_steps(
                     f'aws s3 cp --recursive s3://{TEST_S3_BUCKET}/{test_temp_dir} {hadoop_test_temp_dir};'
                     f'cd {hadoop_test_temp_dir};'
                     f'sudo pip3 uninstall -y sagemaker-feature-store-pyspark;'
+                    f'sudo pip3 uninstall -y sagemaker-feature-store-pyspark-3.1;'
                     f'pip3 install sagemaker_feature_store_pyspark.tar.gz'
                 ]
             }
@@ -92,6 +86,7 @@ step_ids = emr_client.add_job_flow_steps(
                     "bash",
                     "-c",
                     f'pip3 uninstall -y sagemaker-feature-store-pyspark;'
+                    f'pip3 uninstall -y sagemaker-feature-store-pyspark-3.1;'
                     f'rm -r {hadoop_test_temp_dir}'
                 ]
             }
