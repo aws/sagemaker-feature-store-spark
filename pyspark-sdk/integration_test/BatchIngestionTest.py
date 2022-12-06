@@ -105,7 +105,7 @@ def verify_online_record(ingested_row: Row, record_dict: dict):
 
 for row in identity_df.collect():
     get_record_response = featurestore_runtime.get_record(
-        FeatureGroupName=test_feature_group_name,
+        FeatureGroupName=test_feature_group_name_online_only,
         RecordIdentifierValueAsString=str(row["TransactionID"]),
     )
     record = get_record_response["Record"]
