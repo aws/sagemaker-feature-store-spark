@@ -19,3 +19,4 @@ pyspark-sdk/build
 derby.log
 metastore_db
 pyspark-sdk/sagemaker_feature_store_pyspark*.egg-info
+assembly-output
