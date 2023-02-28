@@ -171,7 +171,9 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     )
     val fieldIndexMap = castWithExceptionSchema.fieldNames.zipWithIndex.toMap
 
-    // Encoder needs to be defined during transformation because the original schema is changed
+    // Encoder needs to be defined during transformation because the original schema is changed.
+    // The dataframe has to be cached otherwise the input dataset will be re-ingested when customer perform spark
+    // actions on failedStreamIngestionDataFrame.
     failedStreamIngestionDataFrame = Option(
       repartitionedDataFrame
         .mapPartitions(partition => {
@@ -186,6 +188,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
           )
         })(RowEncoder(castWithExceptionSchema))
         .filter(row => row.getAs[String](fieldIndexMap(ONLINE_INGESTION_ERROR_FILED_NAME)) != null)
+        .cache()
     )
 
     // MapPartitions and Map are lazily evaluated by spark, so action is needed here to ensure ingestion is executed
