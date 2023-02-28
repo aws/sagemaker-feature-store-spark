@@ -173,7 +173,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
     // Encoder needs to be defined during transformation because the original schema is changed.
     // The dataframe has to be cached otherwise the input dataset will be re-ingested when customer perform spark
-    // actions on failed failedStreamIngestionDataFrame.
+    // actions on failedStreamIngestionDataFrame.
     failedStreamIngestionDataFrame = Option(
       repartitionedDataFrame
         .mapPartitions(partition => {
