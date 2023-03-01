@@ -22,8 +22,8 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
     """A central manager for fature store data reporitory.
 
     ``ingest_data`` can be used to do batch data ingestion into the specified feature group. The input data should be in
-    the format of spark DataFrame and feature_group_arn is the specified feature group's arn. To selectively ingest via
-    offline/online store, flip the flag ``direct_offline_store`` according to different use cases.
+    the format of spark DataFrame and feature_group_arn is the specified feature group's arn. To selectively ingest to
+    offline/online store, specify the ``target_stores`` according to different use cases.
     """
     _wrapped_class = "software.amazon.sagemaker.featurestore.sparksdk.FeatureStoreManager"
 
@@ -36,7 +36,7 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         Batch ingest data into SageMaker FeatureStore.
         :param input_data_frame: the data frame to be ingested
         :param feature_group_arn: feature group arn
-        :param direct_offline_store: boolean flag which specifies write data directlly to offline store
+        :param target_stores: a list of target stores which the data should be ingested to
         :return:
         """
         return self._call_java("ingestDataInJava", input_data_frame, feature_group_arn, target_stores)
