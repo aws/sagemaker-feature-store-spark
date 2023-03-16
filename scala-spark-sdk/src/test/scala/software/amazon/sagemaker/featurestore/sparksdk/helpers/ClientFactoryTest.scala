@@ -2,7 +2,7 @@ package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.{assertEquals, assertNotNull, assertNull}
-import org.testng.annotations.Test
+import org.testng.annotations.{Test, BeforeMethod}
 
 class ClientFactoryTest extends TestNGSuite {
 
@@ -10,6 +10,10 @@ class ClientFactoryTest extends TestNGSuite {
    *  client is built, thus we can only do shallow test here to verify if client factory is configured with correct
    *  parameters
    */
+  @BeforeMethod
+  def setup(): Unit = {
+    ClientFactory.skipInitialization = false
+  }
 
   @Test
   def clientFactoryInitializationWithouAssumeRoleArnTest(): Unit = {

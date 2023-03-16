@@ -1,0 +1,52 @@
+name: Build
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      id-token: write
+      contents: read
+
+    steps:
+
+      # Set up and Install required dependencies
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox tox-gh-actions
+
+      # Check out code from PR and initiate build process
+      - uses: actions/checkout@v2
+      - name: Build
+        run: |
+          echo Build started on `date`
+          echo Verifying scala package build, code format and test coverage
+          cd scala-spark-sdk
+          sbt scalafmtCheckAll jacoco
+          cd ..
+          echo Scala pacakge build verification finished
+          echo Packaging pyspark library according to setup.py
+          cd pyspark-sdk
+          python setup.py sdist
+          tox
+          cd ..
+          echo Packaging finished, preparing artifacts for the integration tests
+          mkdir processedArtifacts
+          cp -R pyspark-sdk/integration_test processedArtifacts
+          cp -R pyspark-sdk/dist processedArtifacts
+
+      # Upload processed artifacts to be used for running the integration tests in subsequent integration tests workflow
+      - uses: actions/upload-artifact@v2
+        with:
+          name: processedArtifacts
+          path: processedArtifacts/
