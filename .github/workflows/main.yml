@@ -1,0 +1,33 @@
+name: Receive PR
+
+# read-only repo token
+# no access to secrets
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:        
+      - uses: actions/checkout@v2
+
+      # imitation of a build process
+      - name: Build
+        run: |
+          echo Build started on `date`
+          echo Verifying scala package build, code format and test coverage
+          cd scala-spark-sdk
+          sbt scalafmtCheckAll jacoco
+          cd ..
+          echo Scala pacakge build verification finished
+          echo Packaging pyspark library according to setup.py
+          cd pyspark-sdk
+          python setup.py sdist
+          tox
+          echo Packaging finished, start running integration test
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: pr
+          path: dist/
