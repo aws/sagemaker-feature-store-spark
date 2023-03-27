@@ -20,6 +20,8 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import software.amazon.sagemaker.featurestore.sparksdk.helpers.FeatureGroupHelper._
 import software.amazon.sagemaker.featurestore.sparksdk.validators.InputDataSchemaValidator._
 import org.apache.spark.sql.functions.{col, current_timestamp, date_format, lit, trunc}
+import org.apache.spark.util.LongAccumulator
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.types.{
   ByteType,
   DataType,
@@ -71,6 +73,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
   private var failedStreamIngestionDataFrame: Option[DataFrame] = None
 
+  private var dataFrameSizeCounter: LongAccumulator = null
+
   /** Batch ingest data into SageMaker FeatureStore.
    *
    *  @param inputDataFrame
@@ -81,6 +85,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
    *    choose the target store to ingest the data
    */
   def ingestData(inputDataFrame: DataFrame, featureGroupArn: String, targetStores: List[String] = null): Unit = {
+
+    initializeAccumulators(inputDataFrame.sparkSession.sparkContext)
 
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
     val featureGroupName        = featureGroupArnResolver.resolveFeatureGroupName()
@@ -193,7 +199,12 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
     // MapPartitions and Map are lazily evaluated by spark, so action is needed here to ensure ingestion is executed
     // For more info: https://spark.apache.org/docs/latest/rdd-programming-guide.html#actions
-    val failedOnlineIngestionDataFrameSize = failedStreamIngestionDataFrame.get.count()
+    val failedOnlineIngestionDataFrameSize     = failedStreamIngestionDataFrame.get.count()
+    val successfulOnlineIngestionDataFrameSize = dataFrameSizeCounter.value - failedOnlineIngestionDataFrameSize
+
+    if (successfulOnlineIngestionDataFrameSize > 0) {
+      println(s"Stream ingestion finished, ingested ${successfulOnlineIngestionDataFrameSize} records")
+    }
 
     if (failedOnlineIngestionDataFrameSize > 0) {
       throw StreamIngestionFailureException(
@@ -210,6 +221,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       runTimeClient: SageMakerFeatureStoreRuntimeClient
   ): Iterator[Row] = {
     val newPartition = partition.map(row => {
+      // Increment the row counter value
+      dataFrameSizeCounter.add(1)
       val record = ListBuffer[FeatureValue]()
       columns.foreach(columnName => {
         try {
@@ -330,5 +343,9 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
   private def shouldIngestInStream(targetStores: List[TargetStore]): Boolean = {
     targetStores.contains(TargetStore.ONLINE_STORE)
+  }
+
+  private def initializeAccumulators(sparkConext: SparkContext): Unit = {
+    dataFrameSizeCounter = sparkConext.longAccumulator("dataFrameSizeCounter")
   }
 }
