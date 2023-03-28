@@ -12,7 +12,7 @@ import org.scalatest.PrivateMethodTester
 import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.assertEquals
-import org.testng.annotations.{AfterTest, BeforeClass, DataProvider, Test}
+import org.testng.annotations.{AfterTest, BeforeMethod, DataProvider, Test}
 import software.amazon.awssdk.services.sagemaker.SageMakerClient
 import software.amazon.awssdk.services.sagemaker.model.{
   DataCatalogConfig,
@@ -62,7 +62,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
   private final val mockedSageMakerFeatureStoreRuntimeClient        = mock[SageMakerFeatureStoreRuntimeClient]
   private final val putRecordRequestCaptor                          = ArgCaptor[PutRecordRequest]
 
-  @BeforeClass
+  @BeforeMethod
   def setup(): Unit = {
     ClientFactory.skipInitialization = true
     ClientFactory.sageMakerClient = mockedSageMakerClient
