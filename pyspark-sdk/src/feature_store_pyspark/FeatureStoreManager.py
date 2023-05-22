@@ -34,9 +34,11 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
     def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: str, target_stores: List[str] = None):
         """
         Batch ingest data into SageMaker FeatureStore.
-        :param input_data_frame: the data frame to be ingested
-        :param feature_group_arn: feature group arn
-        :param target_stores: a list of target stores which the data should be ingested to
+
+        :param input_data_frame (DataFrame): the data frame to be ingested
+        :param feature_group_arn (str): feature group arn
+        :param target_stores (List[str]): a list of target stores which the data should be ingested to
+
         :return:
         """
         return self._call_java("ingestDataInJava", input_data_frame, feature_group_arn, target_stores)
@@ -44,8 +46,10 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
     def load_feature_definitions_from_schema(self, input_data_frame: DataFrame):
         """
         Load feature definitions according to the schema of input data frame.
-        :param input_data_frame: input Spark DataFrame to be loaded
-        :return: list of feature definitions
+
+        :param input_data_frame (DataFrame): input Spark DataFrame to be loaded
+
+        :return: list of feature definitions loaded from input data frame.
         """
         java_feature_definitions = self._call_java("loadFeatureDefinitionsFromSchema", input_data_frame)
         return list(map(lambda definition: {
@@ -55,7 +59,8 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
 
     def get_failed_stream_ingestion_data_frame(self) -> DataFrame:
         """
-        Retrieve data frame which inlcudes all records fail to bei ingested via ``ingest_data`` method.
-        :return: the data frame of records fail to ingest
+        Retrieve data frame which includes all records fail to be ingested via ``ingest_data`` method.
+
+        :return: the data frame of records fail to be ingested.
         """
         return self._call_java("getFailedStreamIngestionDataFrame")
