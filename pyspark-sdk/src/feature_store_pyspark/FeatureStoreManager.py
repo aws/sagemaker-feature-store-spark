@@ -35,8 +35,8 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         """
         Batch ingest data into SageMaker FeatureStore.
 
-        :param input_data_frame (DataFrame): the data frame to be ingested
-        :param feature_group_arn (str): feature group arn
+        :param input_data_frame (DataFrame): the DataFrame to be ingested
+        :param feature_group_arn (str): target feature group arn
         :param target_stores (List[str]): a list of target stores which the data should be ingested to
 
         :return:
@@ -45,11 +45,11 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
 
     def load_feature_definitions_from_schema(self, input_data_frame: DataFrame):
         """
-        Load feature definitions according to the schema of input data frame.
+        Load feature definitions according to the schema of input DataFrame.
 
         :param input_data_frame (DataFrame): input Spark DataFrame to be loaded
 
-        :return: list of feature definitions loaded from input data frame.
+        :return: list of feature definitions loaded from input DataFrame.
         """
         java_feature_definitions = self._call_java("loadFeatureDefinitionsFromSchema", input_data_frame)
         return list(map(lambda definition: {
@@ -59,8 +59,8 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
 
     def get_failed_stream_ingestion_data_frame(self) -> DataFrame:
         """
-        Retrieve data frame which includes all records fail to be ingested via ``ingest_data`` method.
+        Retrieve DataFrame which includes all records fail to be ingested via ``ingest_data`` method.
 
-        :return: the data frame of records fail to be ingested.
+        :return: the DataFrame of records that fail to be ingested.
         """
         return self._call_java("getFailedStreamIngestionDataFrame")
