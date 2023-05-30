@@ -35,9 +35,9 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         """
         Batch ingest data into SageMaker FeatureStore.
 
-        :param input_data_frame (DataFrame): the DataFrame to be ingested
-        :param feature_group_arn (str): target feature group arn
-        :param target_stores (List[str]): a list of target stores which the data should be ingested to
+        :param input_data_frame (DataFrame): the DataFrame to be ingested.
+        :param feature_group_arn (str): target feature group arn.
+        :param target_stores (List[str]): a list of target stores which the data should be ingested to.
 
         :return:
         """
@@ -47,7 +47,7 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         """
         Load feature definitions according to the schema of input DataFrame.
 
-        :param input_data_frame (DataFrame): input Spark DataFrame to be loaded
+        :param input_data_frame (DataFrame): input Spark DataFrame to be loaded.
 
         :return: list of feature definitions loaded from input DataFrame.
         """
