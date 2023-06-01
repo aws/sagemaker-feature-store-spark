@@ -16,9 +16,9 @@ jobs:
     steps:
 
       # Set up and Install required dependencies
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -28,7 +28,7 @@ jobs:
           pip install tox tox-gh-actions
 
       # Check out code from PR and initiate build process
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Build
         run: |
           echo Build started on `date`
@@ -48,7 +48,7 @@ jobs:
           cp -R pyspark-sdk/dist processedArtifacts
 
       # Upload processed artifacts to be used for running the integration tests in subsequent integration tests workflow
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: processedArtifacts
           path: processedArtifacts/
@@ -65,9 +65,9 @@ jobs:
     steps:
 
       # Set up and install required dependencies
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -78,7 +78,7 @@ jobs:
 
       # Configure AWS credentials
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-region: us-west-2
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
