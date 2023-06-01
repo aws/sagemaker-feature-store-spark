@@ -4,10 +4,10 @@ on:
   pull_request:
     branches:
       - main
-    needs: [build]
 
 jobs:
   test:
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
