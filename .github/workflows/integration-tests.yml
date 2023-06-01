@@ -17,7 +17,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
   test:
-    needs: build
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
