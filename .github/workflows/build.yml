@@ -78,7 +78,7 @@ jobs:
 
       # Configure AWS credentials
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v3
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-region: us-west-2
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -86,7 +86,7 @@ jobs:
 
       # Download processed artifacts generated from build workflow
       - name: 'Download Build Artifacts'
-        uses: actions/github-script@v3.1.0
+        uses: actions/github-script@v6
         with:
           script: |
             var artifacts = await github.actions.listWorkflowRunArtifacts({
