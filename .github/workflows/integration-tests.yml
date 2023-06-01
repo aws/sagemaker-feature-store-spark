@@ -1,11 +1,10 @@
 name: Integration Tests
 
 on:
-  workflow_run:
-    workflows:
-      - Build
-    types:
-      - completed
+  pull_request:
+    branches:
+      - main
+    needs: build
 
 jobs:
   test:
@@ -16,10 +15,6 @@ jobs:
       contents: write
       actions: read
 
-    # Run only if a successful PR request build workflow triggered the integration tests
-    if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
     steps:
 
       # Set up and install required dependencies
