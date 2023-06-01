@@ -1,11 +1,6 @@
 name: Build and Test
 
 on:
-  workflow_dispatch:
-    permissions:
-      # Restrict to users with write access
-      push: write
-
   pull_request:
     branches:
       - main
