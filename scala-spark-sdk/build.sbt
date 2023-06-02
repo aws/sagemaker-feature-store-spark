@@ -16,6 +16,7 @@ licenses := Seq("Apache License, Version 2.0" -> url("https://aws.amazon.com/apa
 
 // change the output path of assembly jar
 lazy val SageMakerFeatureStoreSpark = (project in file(".")).settings(
+  assemblyPackageScala / assembleArtifact := false,
   assembly / assemblyOutputPath := file(s"./assembly-output/${(assembly/assemblyJarName).value}")
 )
 
@@ -53,6 +54,7 @@ libraryDependencies ++= Seq(
 
   "org.apache.iceberg" %% s"iceberg-spark-runtime-$majorSparkVersion" % "0.14.+",
 
+  // Provided dependencies
   // hadoop-common and hadoop-aws should be provided by either platform or user. On EMR, sagemaker processing these are
   // pre-installed, to avoid dependency conflict which could cause weird failures, we exclude them from fat jar. Besides
   // spark has a tight coupling with the version of hadoop.
@@ -61,9 +63,22 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
   "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
 
+  // Test dependencies
   "org.mockito" %% "mockito-scala-scalatest" % "1.17.12" % Test,
   "org.scalatest" %% "scalatest" % "3.0.8" % Test,
   "org.scalatestplus" %% "testng-6-7" % "3.2.9.0" % Test,
+)
+
+
+// shadow all dependencies when building the assembly jar otherwise it is possible that either direct or
+// transitive dependencies would introduce dependency conflicts in runtime environment.
+assembly / assemblyShadeRules := Seq(
+  ShadeRule.rename("software.amazon.awssdk.**" -> "smfs.shaded.software.amazon.awssdk.@1").inAll,
+  ShadeRule.rename("io.netty.**" -> "smfs.shaded.io.netty.@1").inAll,
+  ShadeRule.rename("org.apache.commons.**" -> "smfs.shaded.org.apache.commons.@1").inAll,
+  ShadeRule.rename("org.apache.hc.**" -> "smfs.shaded.org.apache.hc.@1").inAll,
+  ShadeRule.rename("org.apache.http.**" -> "smfs.shaded.org.apache.hc.@1").inAll,
+  ShadeRule.rename("org.apache.iceberg.**" -> "smfs.shaded.org.apache.iceberg.@1").inAll,
 )
 
 exportJars := true
