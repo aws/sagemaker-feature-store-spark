@@ -94,7 +94,7 @@ After the feature definitions are retured, you can create feature groups using `
 
 To ingest a DataFrame into FeatureStore:
 
-```
+```python
 from feature_store_pyspark.FeatureStoreManager import FeatureStoreManager
 
 feature_group_arn = <your-feature-group-arn>
@@ -105,7 +105,7 @@ If `direct_offline_store` is specified to true, the spark library will ingest da
 
 To load feature definitions:
 
-```
+```python
 feature_definitions = feature_store_manager.load_feature_definitions_from_schema(user_data_frame)
 ```
 
