@@ -395,7 +395,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
           .toDF("record-identifier", "event-time"),
         PutRecordRequest
           .builder()
-          .featureGroupName("test-feature-group")
+          .featureGroupName(TEST_FEATURE_GROUP_ARN)
           .targetStores(List(TargetStore.ONLINE_STORE).asJava)
           .record(
             FeatureValue

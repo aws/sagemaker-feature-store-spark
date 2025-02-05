@@ -83,7 +83,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
   def ingestData(inputDataFrame: DataFrame, featureGroupArn: String, targetStores: List[String] = null): Unit = {
 
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
-    val featureGroupName        = featureGroupArnResolver.resolveFeatureGroupName()
+    val featureGroupName        = featureGroupArn
     val region                  = featureGroupArnResolver.resolveRegion()
 
     ClientFactory.initialize(region = region, roleArn = assumeRoleArn)
