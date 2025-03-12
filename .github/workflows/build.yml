@@ -22,10 +22,10 @@ jobs:
                 repo: context.repo.repo,
                 username: "${{ github.event.pull_request.user.login }}",
               });
-              console.log("Verifed ${{ github.event.pull_request.user.login }} is a repo collaborator. Auto Approving PR Checks.")
+              console.log("Verifed ${{ github.event.pull_request.user.login }} is a repo collaborator. Auto Approving Build.")
               return res.status == "204" ? "auto-approve" : "manual-approval"
             } catch (error) {
-              console.log("${{ github.event.pull_request.user.login }} is not a collaborator. Requiring Manual Approval to run PR Checks.")
+              console.log("${{ github.event.pull_request.user.login }} is not a collaborator. Requiring Manual Approval to run Build.")
               return "manual-approval"
             }
   # Manual approval is necessary if author of commit is not contributor
