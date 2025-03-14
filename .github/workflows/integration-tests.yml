@@ -18,7 +18,6 @@ jobs:
 
     # Run only if a successful PR request build workflow triggered the integration tests
     if: >
-      github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
     steps:
 

@@ -1,44 +1,19 @@
 name: Build
 
 on:
-  pull_request:
+  pull_request_review:
+    types: [submitted]
 
 jobs:
-  # Checks for whether author of commit is a contributor 
-  collab-check:
+  approved:
+    if: github.event.review.state == 'approved'
     runs-on: ubuntu-latest
-    outputs: 
-      approval-env: ${{ steps.collab-check.outputs.result }}
     steps:
-      - name: Collaborator Check
-        uses: actions/github-script@v7
-        id: collab-check
-        with:
-          result-encoding: string
-          script: | 
-            try {
-              const res = await github.rest.repos.checkCollaborator({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                username: "${{ github.event.pull_request.user.login }}",
-              });
-              console.log("Verifed ${{ github.event.pull_request.user.login }} is a repo collaborator. Auto Approving Build.")
-              return res.status == "204" ? "auto-approve" : "manual-approval"
-            } catch (error) {
-              console.log("${{ github.event.pull_request.user.login }} is not a collaborator. Requiring Manual Approval to run Build.")
-              return "manual-approval"
-            }
-  # Manual approval is necessary if author of commit is not contributor
-  wait-for-approval:
-    runs-on: ubuntu-latest
-    needs: [collab-check]
-    environment: ${{ needs.collab-check.outputs.approval-env }}
-    steps:
-      - run: echo "Workflow Approved! Starting build."
+      - run: echo "This PR recieved an approval"
 
   build:
     runs-on: ubuntu-latest
-    needs: [wait-for-approval]
+    needs: [approved]
     permissions:
       pull-requests: write
       id-token: write
