@@ -140,7 +140,7 @@ The test execution script and test itself are included in `pyspark-sdk/integrati
 
 #### Github Repository Automated Testing
 
-The Github repository is connected to the CodeBuild project in our spark test account. Modify the command steps in `ci/buildspec.yml` according to your demands.
+The Github repository is connected to the CodeBuild project in our spark test account. Modify the command steps in `ci/buildspec.yml` according to your demands. 
 
 ## More Reference
 
