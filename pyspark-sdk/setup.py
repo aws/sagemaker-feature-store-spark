@@ -8,8 +8,6 @@ from setuptools import setup
 from setuptools.command.install import install
 from pathlib import Path
 
-# ── Removed: SPARK_HOME was read here but never used at module level ──
-
 TEMP_PATH = "deps"
 VERSION_PATH = "VERSION"
 JARS_TARGET = os.path.join(TEMP_PATH, "jars")
