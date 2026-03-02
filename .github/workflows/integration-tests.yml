@@ -70,6 +70,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      id-token: write
     steps:
       - name: Checkout head commit
         uses: actions/checkout@v4
