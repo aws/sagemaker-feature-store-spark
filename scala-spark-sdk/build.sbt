@@ -23,7 +23,7 @@ lazy val SageMakerFeatureStoreSpark = (project in file(".")).settings(
 val sparkVersion = System.getProperty("SPARK_VERSION", "3.1.2")
 val majorSparkVersion = sparkVersion.substring(0, sparkVersion.lastIndexOf("."))
 
-val awsSDKVersion = "2.18.32"
+val awsSDKVersion = "2.38.5"
 val sparkVersionToHadoopVersionMap = Map(
   "3.0" -> "3.2.4",
   "3.1" -> "3.2.4",
