@@ -125,7 +125,7 @@ jobs:
           PY_SHORT=$(echo "${{ matrix.python-version }}" | tr -d '.')
           cd pyspark-sdk
           python setup.py sdist
-          tox -e py${PY_SHORT}-spark${SPARK_SHORT}
+          tox -e py${PY_SHORT}-spark${SPARK_SHORT} --installpkg dist/sagemaker_feature_store_pyspark-*.tar.gz
 
       - name: Run Integration Tests
         run: |
