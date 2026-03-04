@@ -121,9 +121,11 @@ jobs:
           PYSPARK_VERSION: ${{ matrix.pyspark-version }}
         run: |
           export SPARK_BUILD_VERSION=$(echo "${{ matrix.pyspark-version }}" | cut -d. -f1,2)
+          SPARK_SHORT=$(echo "${{ matrix.pyspark-version }}" | cut -d. -f1,2 | tr -d '.')
+          PY_SHORT=$(echo "${{ matrix.python-version }}" | tr -d '.')
           cd pyspark-sdk
           python setup.py sdist
-          tox
+          tox -e py${PY_SHORT}-spark${SPARK_SHORT}
 
       - name: Run Integration Tests
         run: |
