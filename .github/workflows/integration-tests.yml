@@ -98,7 +98,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip "setuptools<82" wheel
           pip install pyspark==${{ matrix.pyspark-version }}
           pip install --upgrade boto3
           pip install tox tox-gh-actions

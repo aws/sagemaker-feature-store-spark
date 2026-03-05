@@ -233,7 +233,7 @@ setup(
 
     python_requires=">=3.8",
 
-    install_requires=[],
+    install_requires=["setuptools<82"],
 
     cmdclass={
         "install": CustomInstall,
