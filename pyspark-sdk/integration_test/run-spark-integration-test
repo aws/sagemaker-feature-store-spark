@@ -96,13 +96,27 @@ step_ids = emr_client.add_job_flow_steps(
 )['StepIds']
 
 pending_steps_id_list = step_ids
+import random
+from botocore.exceptions import ClientError
+
+def list_steps_with_retry(emr_client, cluster_id, step_ids, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            return emr_client.list_steps(
+                ClusterId=cluster_id,
+                StepIds=step_ids,
+            )["Steps"]
+        except ClientError as e:
+            if "ThrottlingException" in str(e) and attempt < max_retries - 1:
+                wait = (2 ** attempt) + random.uniform(0, 1)
+                print(f"Throttled on ListSteps, retrying in {wait:.1f}s...")
+                time.sleep(wait)
+            else:
+                raise
 
 while True:
 
-    steps = emr_client.list_steps(
-        ClusterId=cluster_id,
-        StepIds=pending_steps_id_list,
-    )["Steps"]
+    steps = list_steps_with_retry(emr_client, cluster_id, pending_steps_id_list)
 
     for step in steps:
         if step["Status"]["State"] in ['CANCELLED', 'FAILED', 'INTERRUPTED', 'CANCEL_PENDING']:
@@ -116,8 +130,8 @@ while True:
     if len(pending_steps_id_list) == 0:
         break
 
-    # Sleep for a while before next polling
+    # Sleep longer to avoid throttling with parallel matrix jobs
     print("=================================================================")
-    time.sleep(10)
+    time.sleep(30 + random.uniform(0, 10))
 
 print("Spark library integration test succeeded!")
