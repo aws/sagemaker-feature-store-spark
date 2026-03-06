@@ -3,6 +3,12 @@ name: Integration Tests
 on:
   pull_request_target:
     branches: [main]
+  workflow_dispatch:          # ← add this
+    inputs:
+      spark-version:
+        description: 'PySpark version to test'
+        required: false
+        default: '3.5.1'
 
 permissions:
   id-token: write
