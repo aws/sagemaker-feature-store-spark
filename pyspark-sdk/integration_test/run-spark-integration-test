@@ -4,7 +4,9 @@ import subprocess
 import os
 import sys
 import time
+import random
 import boto3
+from botocore.exceptions import ClientError
 
 DIST_DIR = "../dist"
 BATCH_INGESTION_TEST_FILE_NAME = "BatchIngestionTest.py"
@@ -41,6 +43,8 @@ clusters = emr_client.list_clusters(
 )["Clusters"]
 clusters = list(filter(lambda cluster: cluster["Name"] == EMR_TEST_CLUSTER_NAME, clusters))
 clusters.sort(key=lambda cluster: cluster["Status"]["Timeline"]["CreationDateTime"], reverse=True)
+if not clusters:
+    sys.exit(f"No active EMR cluster found with name: {EMR_TEST_CLUSTER_NAME}")
 cluster_id = clusters[0]["Id"]
 hadoop_test_temp_dir = f'/home/hadoop/{test_temp_dir}'
 
@@ -96,8 +100,6 @@ step_ids = emr_client.add_job_flow_steps(
 )['StepIds']
 
 pending_steps_id_list = step_ids
-import random
-from botocore.exceptions import ClientError
 
 def list_steps_with_retry(emr_client, cluster_id, step_ids, max_retries=5):
     for attempt in range(max_retries):
@@ -107,7 +109,7 @@ def list_steps_with_retry(emr_client, cluster_id, step_ids, max_retries=5):
                 StepIds=step_ids,
             )["Steps"]
         except ClientError as e:
-            if "ThrottlingException" in str(e) and attempt < max_retries - 1:
+            if e.response['Error']['Code'] == 'ThrottlingException' and attempt < max_retries - 1:
                 wait = (2 ** attempt) + random.uniform(0, 1)
                 print(f"Throttled on ListSteps, retrying in {wait:.1f}s...")
                 time.sleep(wait)
