@@ -63,7 +63,7 @@ step_ids = emr_client.add_job_flow_steps(
                     f'mkdir {hadoop_test_temp_dir};'
                     f'aws s3 cp --recursive s3://{TEST_S3_BUCKET}/{test_temp_dir} {hadoop_test_temp_dir};'
                     f'cd {hadoop_test_temp_dir};'
-                    f'sudo pip3 install --upgrade boto3;'
+                    f'sudo pip3 install --upgrade boto3 numpy;'
                     f'sudo pip3 uninstall -y sagemaker-feature-store-pyspark;'
                     f'sudo pip3 uninstall -y sagemaker-feature-store-pyspark-3.1;'
                     f'sudo pip3 install sagemaker_feature_store_pyspark.tar.gz'
@@ -78,6 +78,7 @@ step_ids = emr_client.add_job_flow_steps(
                 'Args': [
                     "bash",
                     "-c",
+                    f'export PYTHONPATH="/usr/lib/spark/python:/usr/lib/spark/python/lib/py4j-src.zip:$PYTHONPATH";'
                     f'python3 {hadoop_test_temp_dir}/{BATCH_INGESTION_TEST_FILE_NAME}'
                 ]
             }
