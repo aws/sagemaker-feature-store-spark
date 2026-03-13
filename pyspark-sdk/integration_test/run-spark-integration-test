@@ -4,7 +4,9 @@ import subprocess
 import os
 import sys
 import time
+import random
 import boto3
+from botocore.exceptions import ClientError
 
 DIST_DIR = "../dist"
 BATCH_INGESTION_TEST_FILE_NAME = "BatchIngestionTest.py"
@@ -41,6 +43,8 @@ clusters = emr_client.list_clusters(
 )["Clusters"]
 clusters = list(filter(lambda cluster: cluster["Name"] == EMR_TEST_CLUSTER_NAME, clusters))
 clusters.sort(key=lambda cluster: cluster["Status"]["Timeline"]["CreationDateTime"], reverse=True)
+if not clusters:
+    sys.exit(f"No active EMR cluster found with name: {EMR_TEST_CLUSTER_NAME}")
 cluster_id = clusters[0]["Id"]
 hadoop_test_temp_dir = f'/home/hadoop/{test_temp_dir}'
 
@@ -59,10 +63,10 @@ step_ids = emr_client.add_job_flow_steps(
                     f'mkdir {hadoop_test_temp_dir};'
                     f'aws s3 cp --recursive s3://{TEST_S3_BUCKET}/{test_temp_dir} {hadoop_test_temp_dir};'
                     f'cd {hadoop_test_temp_dir};'
-                    f'pip3 install --upgrade boto3;'
+                    f'sudo pip3 install --upgrade boto3 numpy;'
                     f'sudo pip3 uninstall -y sagemaker-feature-store-pyspark;'
                     f'sudo pip3 uninstall -y sagemaker-feature-store-pyspark-3.1;'
-                    f'pip3 install sagemaker_feature_store_pyspark.tar.gz'
+                    f'sudo pip3 install sagemaker_feature_store_pyspark.tar.gz'
                 ]
             }
         },
@@ -74,6 +78,7 @@ step_ids = emr_client.add_job_flow_steps(
                 'Args': [
                     "bash",
                     "-c",
+                    f'export PYTHONPATH="/usr/lib/spark/python:/usr/lib/spark/python/lib/py4j-src.zip:$PYTHONPATH";'
                     f'python3 {hadoop_test_temp_dir}/{BATCH_INGESTION_TEST_FILE_NAME}'
                 ]
             }
@@ -97,12 +102,24 @@ step_ids = emr_client.add_job_flow_steps(
 
 pending_steps_id_list = step_ids
 
+def list_steps_with_retry(emr_client, cluster_id, step_ids, max_retries=5):
+    for attempt in range(max_retries):
+        try:
+            return emr_client.list_steps(
+                ClusterId=cluster_id,
+                StepIds=step_ids,
+            )["Steps"]
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ThrottlingException' and attempt < max_retries - 1:
+                wait = (2 ** attempt) + random.uniform(0, 1)
+                print(f"Throttled on ListSteps, retrying in {wait:.1f}s...")
+                time.sleep(wait)
+            else:
+                raise
+
 while True:
 
-    steps = emr_client.list_steps(
-        ClusterId=cluster_id,
-        StepIds=pending_steps_id_list,
-    )["Steps"]
+    steps = list_steps_with_retry(emr_client, cluster_id, pending_steps_id_list)
 
     for step in steps:
         if step["Status"]["State"] in ['CANCELLED', 'FAILED', 'INTERRUPTED', 'CANCEL_PENDING']:
@@ -116,8 +133,8 @@ while True:
     if len(pending_steps_id_list) == 0:
         break
 
-    # Sleep for a while before next polling
+    # Sleep longer to avoid throttling with parallel matrix jobs
     print("=================================================================")
-    time.sleep(10)
+    time.sleep(30 + random.uniform(0, 10))
 
 print("Spark library integration test succeeded!")

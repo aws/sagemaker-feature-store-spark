@@ -2,52 +2,72 @@ SageMaker FeatureStore Spark is an open source Spark library for [Amazon SageMak
 
 With this spark connector, you can easily ingest data to FeatureGroup's online and offline store from Spark `DataFrame`.
 
+## Supported Versions
+
+| Component | Supported Versions |
+|---|---|
+| Spark | 3.1, 3.2, 3.3, 3.4, 3.5 |
+| Scala | >= 2.12 |
+| Python | 3.8, 3.9, 3.10, 3.11, 3.12 |
+| EMR | emr-7.x and above |
+
+> **Note:** Not all Python/PySpark combinations are supported. See the compatibility matrix below.
+
+### Python / PySpark Compatibility Matrix
+
+| Python \ PySpark | 3.1 | 3.2 | 3.3 | 3.4 | 3.5 |
+|---|---|---|---|---|---|
+| 3.8 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 3.9 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 3.10 | ❌ | ✅ | ✅ | ✅ | ✅ |
+| 3.11 | ❌ | ❌ | ❌ | ✅ | ✅ |
+| 3.12 | ❌ | ❌ | ❌ | ✅ | ✅ |
+
 ## Installation
 
 ### Scala
 
-The library is compatible with Scala >= 2.12, and Spark >= 3.0.0. 
-If your application is on EMR, pleas use emr-6.x.
-
-TODO: Add instructions here how to install the library from Maven.
-
 After the library is imported, you can build your application into a jar and submit the application using `spark-shell` or `spark-submit`.
+
+The Scala SDK supports cross-building for Spark 3.1 through 3.5. Specify the target Spark version at build time:
+```
+sbt -DSPARK_VERSION=3.5.1 assembly
+```
 
 #### EMR
 
-Once you import the spark library as a dependency in your application, you shoud be able to submit the spark job according to this EMR [documentation](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-submit-step.html).  
+Once you import the spark library as a dependency in your application, you should be able to submit the spark job according to this EMR [documentation](https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-submit-step.html).
 
 ### Python
 
-The library is compatible with Python >= 3.6, and PySpark >= 3.0.0.
-If your application is on EMR, pleas use emr-6.x.
+Please make sure that the environment has PySpark and Numpy installed.
 
-Please also make sure that the environment has PySpark and Numpy installed.
+The spark library is available on [PyPi](https://pypi.org/project/sagemaker-feature-store-pyspark/).
 
-The spark library is available on [PyPi](https://pypi.org/project/sagemaker-feature-store-pyspark/)
-Before installation, it is recommended to set `SPARK_HOME` environment variable to the path where your Spark is installed, because during installation the library will automatically copy some depedent jars to `SPARK_HOME`.
-For EMR, the library installation will handle the path automatically, so there is no need to specify `SPARK_HOME` if you're installing on EMR.
+The package bundles pre-built JARs for each supported Spark version (3.1–3.5). At runtime, the correct JAR is automatically selected based on your installed PySpark version.
+
+If `SPARK_HOME` is set, the installer will copy the matching JAR into `$SPARK_HOME/jars`. For EMR, the path is handled automatically.
 
 To install the library:
 ```
-sudo -E pip3 install sagemaker-feature-store-pyspark --no-binary :all:
+pip3 install sagemaker-feature-store-pyspark --no-binary :all:
 ```
 
 #### EMR
 
-Create a custom jar step of EMR to start the library installation
+Create a custom jar step of EMR to start the library installation.
 
 If your EMR has single node:
 ```
 Jar Location: command-runner.jar
-Arguments: sudo -E pip3 install sagemaker-feature-store-pyspark —no-binary :all:
+Arguments: sudo -E pip3 install sagemaker-feature-store-pyspark --no-binary :all:
 ```
-This will only install the library on `Driver` node.
+This will only install the library on the `Driver` node.
 
-To distribute the library to all executor nodes, you can create a installation script and add a custom bootstrap while creating EMR cluster.
+To distribute the library to all executor nodes, you can create an installation script and add a custom bootstrap while creating the EMR cluster.
 
-For more information, pleas take a look at [EMR bootstramp](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-bootstrap.html).
-Since bootstrap action is executed before all EMR applications are installed, so dependent jars cannot be automatically loaded to `SPARK_HOME`.
+For more information, take a look at [EMR bootstrap](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-bootstrap.html).
+Since bootstrap actions are executed before all EMR applications are installed, dependent jars cannot be automatically loaded to `SPARK_HOME`.
 So when submitting your application, please specify dependent jars using:
 ```
 --jars `feature-store-pyspark-dependency-jars`
@@ -55,15 +75,12 @@ So when submitting your application, please specify dependent jars using:
 
 #### SageMaker Notebook
 
-Since SageMaker Notebook instances are using older version of Spark library which is not compatible with the spark version of FeatureStore Spark library. The Spark on SageMaker Notebook instance has to be uninstalled first and reinstall with a newer version.
+SageMaker Notebook instances may use an older version of Spark. Install a compatible version first:
 
-So, add a cell like this in your notebook:
 ```
-# Install a newer versiion of Spark which is compatible with spark library
-!pip3 install pyspark==3.1.1
+# Install a version of PySpark compatible with the spark library (3.1 - 3.5)
+!pip3 install pyspark==3.5.1
 ```
-
-After finish executing the notebook, you can restore the original version which is Spark-2.4.0.
 
 ## Getting Started
 
@@ -73,7 +90,7 @@ After finish executing the notebook, you can restore the original version which 
 
 To ingest a DataFrame into FeatureStore:
 
-```
+```scala
 import com.amazonaws.services.sagemaker.featurestore.sparksdk.FeatureStoreManager
 
 val featureGroupArn = <your-feature-group-arn>
@@ -84,17 +101,17 @@ If `directOfflineStore` is specified to true, the spark library will ingest data
 
 To load feature definitions:
 
-```
+```scala
 val featureDefinitions = featureStoreManager.loadFeatureDefinitionsFromSchema(inputDataFrame)
 ```
 
-After the feature definitions are retured, you can create feature groups using `CreateFeatureGroup` API.
+After the feature definitions are returned, you can create feature groups using `CreateFeatureGroup` API.
 
 ### Python
 
 To ingest a DataFrame into FeatureStore:
 
-```
+```python
 from feature_store_pyspark.FeatureStoreManager import FeatureStoreManager
 
 feature_group_arn = <your-feature-group-arn>
@@ -105,11 +122,11 @@ If `direct_offline_store` is specified to true, the spark library will ingest da
 
 To load feature definitions:
 
-```
+```python
 feature_definitions = feature_store_manager.load_feature_definitions_from_schema(user_data_frame)
 ```
 
-After the feature definitions are retured, you can create feature groups using `CreateFeatureGroup` API.
+After the feature definitions are returned, you can create feature groups using `CreateFeatureGroup` API.
 
 ## Development
 
@@ -117,30 +134,39 @@ After the feature definitions are retured, you can create feature groups using `
 
 This library is built in Scala, and Python methods are actually calling Scala via JVM through `wrapper.py`. To add more features, please make sure you finish the implementation in Scala first and perhaps you need to update the wrapper so that functionality of Scala and Python are in sync.
 
+Note: Spark 3.5 introduced a breaking change in the `ExpressionEncoder` API. The library handles this with version-specific source directories (`scala-spark-3.5` and `scala-spark-3.1-3.4`) that are selected at build time.
+
 ### Test Coverage
 
-Both Scala and Python versions have unit test covered. In addition to that, we have integration test for Python version which verifies there is no regressions in terms of functionality.
+Both Scala and Python versions have unit tests covered. In addition to that, we have integration tests for the Python version which verify there are no regressions in terms of functionality.
 
 #### Scala Package Build
 
-It is a good practice to keep our code always formatted correctly, we used `scalafmt` to auto format the code. So, please run `sbt scalafmtAll` to format your code.
+We use `scalafmt` to auto format the code. Please run `sbt scalafmtAll` to format your code.
 
 To get the test coverage report and format check result, run `sbt jacoco scalafmtCheckAll`.
 
+To build for a specific Spark version:
+```
+sbt -DSPARK_VERSION=3.5.1 assembly
+```
+
 #### Python Package Build
 
-We are using `tox` for test purposes, you can check the build by running `tox`. To configure or figure out the command we run by tox, please checkout `tox.ini`.
+We are using `tox` for test purposes. The test matrix covers Python 3.8–3.12 against PySpark 3.2–3.5. You can check the build by running `tox`. To configure or figure out the commands we run, please check `tox.ini`.
 
 #### Integration Test
 
-The test execution script and test itself are included in `pyspark-sdk/integration_test`, to run the test: 
+The test execution script and test itself are included in `pyspark-sdk/integration_test`, to run the test:
 
 1. Fetch the credential from our spark test account first.
 2. Run the test execution script `run-spark-integration-test`
 
-#### Github Repository Automated Testing
+Integration tests run on Python 3.10 + PySpark 3.5.1.
 
-The Github repository is connected to the CodeBuild project in our spark test account. Modify the command steps in `ci/buildspec.yml` according to your demands.
+#### GitHub Repository Automated Testing
+
+The GitHub repository uses GitHub Actions for CI. The workflow runs unit tests across the full Python/PySpark version matrix and integration tests on Python 3.10 + PySpark 3.5.1. See `.github/workflows/integration-tests.yml` for details.
 
 ## More Reference
 

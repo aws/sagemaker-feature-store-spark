@@ -16,7 +16,6 @@
 
 package software.amazon.sagemaker.featurestore.sparksdk
 
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import software.amazon.sagemaker.featurestore.sparksdk.helpers.FeatureGroupHelper._
 import software.amazon.sagemaker.featurestore.sparksdk.validators.InputDataSchemaValidator._
 import org.apache.spark.sql.functions.{col, current_timestamp, date_format, lit, trunc}
@@ -186,7 +185,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
             targetStores,
             ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder.build()
           )
-        })(RowEncoder(castWithExceptionSchema))
+        })(SparkRowEncoderAdaptor.encoderFor(castWithExceptionSchema))
         .filter(row => row.getAs[String](fieldIndexMap(ONLINE_INGESTION_ERROR_FILED_NAME)) != null)
         .cache()
     )
