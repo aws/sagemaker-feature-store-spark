@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sagemaker_feature_store_pyspark"
 description = "Amazon SageMaker FeatureStore PySpark Bindings"
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.8"
 dynamic = ["version"]
