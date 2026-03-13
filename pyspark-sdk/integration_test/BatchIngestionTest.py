@@ -261,6 +261,7 @@ object_list = list(
         lambda entry: (
             f"EventTime_trunc={event_time_date.strftime('%Y-%m-%d')}"
             in entry['Key']
+            and entry['Size'] > 0
         ),
         object_listing['Contents']
     )

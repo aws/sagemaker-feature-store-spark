@@ -11,7 +11,17 @@ With this spark connector, you can easily ingest data to FeatureGroup's online a
 | Python | 3.8, 3.9, 3.10, 3.11, 3.12 |
 | EMR | emr-7.x and above |
 
-> **Note:** Not all Python/PySpark combinations are supported. Python 3.10+ is not compatible with PySpark 3.1, Python 3.11+ is not compatible with PySpark 3.2, and Python 3.12 is not compatible with PySpark 3.3.
+> **Note:** Not all Python/PySpark combinations are supported. See the compatibility matrix below.
+
+### Python / PySpark Compatibility Matrix
+
+| Python \ PySpark | 3.1 | 3.2 | 3.3 | 3.4 | 3.5 |
+|---|---|---|---|---|---|
+| 3.8 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 3.9 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 3.10 | ❌ | ✅ | ✅ | ✅ | ✅ |
+| 3.11 | ❌ | ❌ | ❌ | ✅ | ✅ |
+| 3.12 | ❌ | ❌ | ❌ | ✅ | ✅ |
 
 ## Installation
 
