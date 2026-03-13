@@ -265,10 +265,11 @@ object_list = list(
         object_listing['Contents']
     )
 )
-tc.assertEqual(len(object_list), 1)
-offline_store_df = spark.read.format("parquet").load(
-    f's3://spark-test-bucket-{account_id}/{object_list[0]["Key"]}'
-)
+tc.assertGreaterEqual(len(object_list), 1)
+parquet_paths = [
+    f's3://spark-test-bucket-{account_id}/{obj["Key"]}' for obj in object_list
+]
+offline_store_df = spark.read.format("parquet").load(parquet_paths)
 
 # verify the values and appeneded columns are persisted correctly
 for row in identity_df.collect():
