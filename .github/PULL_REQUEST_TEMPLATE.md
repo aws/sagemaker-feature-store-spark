@@ -11,7 +11,7 @@ _Put an `x` in the boxes that apply. You can also fill these out after creating 
 #### General
 
 - [ ] I have read the CONTRIBUTING doc
-- [ ] I certify that the changes I am introducing will be backword compatible
+- [ ] I certify that the changes I am introducing will be backward compatible
 - [ ] I used the commit message format described in CONTRIBUTING doc
 
 #### Tests
