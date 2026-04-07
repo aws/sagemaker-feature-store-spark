@@ -63,6 +63,7 @@ libraryDependencies ++= Seq(
   "software.amazon.awssdk" % "sagemakerfeaturestoreruntime" % awsSDKVersion,
 
   "software.amazon.awssdk" % "glue" % awsSDKVersion,
+  "software.amazon.awssdk" % "lakeformation" % awsSDKVersion,
   "software.amazon.awssdk" % "s3" % awsSDKVersion,
   "software.amazon.awssdk" % "dynamodb" % awsSDKVersion,
   "software.amazon.awssdk" % "kms" % awsSDKVersion,
