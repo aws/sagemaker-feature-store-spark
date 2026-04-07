@@ -25,7 +25,7 @@ import scala.util.{Failure, Success, Try}
 object LakeFormationHelper {
 
   private val logger                      = LoggerFactory.getLogger(this.getClass)
-  private val CREDENTIAL_DURATION_SECONDS = 43200
+  private val CREDENTIAL_DURATION_SECONDS = 3600
   private val REFRESH_BUFFER_SECONDS      = 300
 
   def checkAndVendCredentials(
@@ -62,12 +62,13 @@ object LakeFormationHelper {
       table: String
   ): Option[LakeFormationCredentials] = {
     val tableArn = buildGlueTableArn(partition, region, accountId, database, table)
+    logger.info(s"Vending LF credentials for table ARN: $tableArn")
     Try {
       val response = ClientFactory.lakeFormationClient.getTemporaryGlueTableCredentials(
         GetTemporaryGlueTableCredentialsRequest
           .builder()
           .tableArn(tableArn)
-          .permissions(Permission.INSERT)
+          .permissions(Permission.SELECT, Permission.INSERT, Permission.DESCRIBE)
           .durationSeconds(CREDENTIAL_DURATION_SECONDS)
           .build()
       )

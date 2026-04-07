@@ -31,28 +31,39 @@ object SparkSessionInitializer {
       sparkSession: SparkSession,
       offlineStoreEncryptionKmsKeyId: String,
       assumeRoleArn: String,
-      region: String
+      region: String,
+      lfCredentials: Option[LakeFormationCredentials] = None
   ): Unit = {
 
-    // Initialize hadoop configurations based on if assume role arn is provided
-    // 1. If role arn is not provided, use default credential provider
+    // Initialize hadoop configurations based on credential source
+    // 1. If LF credentials are provided, use temporary credentials from Lake Formation
+    // 2. If role arn is not provided, use default credential provider
     // For more info: https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html
-    // 2. If role arn is provided, use assumed role arn provider instead
+    // 3. If role arn is provided, use assumed role arn provider instead
     // For more info: https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/assumed_roles.html
 
-    val local_credentials_provider = List(
-      "com.amazonaws.auth.ContainerCredentialsProvider",
-      "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
-    ).mkString(",")
-    if (assumeRoleArn == null) {
-      sparkSession.sparkContext.hadoopConfiguration
-        .set("fs.s3a.aws.credentials.provider", local_credentials_provider)
-    } else {
-      val credentials_provider = "org.apache.hadoop.fs.s3a.auth.AssumedRoleCredentialProvider"
-      sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.aws.credentials.provider", credentials_provider)
-      sparkSession.sparkContext.hadoopConfiguration
-        .set("fs.s3a.assumed.role.credentials.provider", local_credentials_provider)
-      sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.assumed.role.arn", assumeRoleArn)
+    lfCredentials match {
+      case Some(creds) =>
+        sparkSession.sparkContext.hadoopConfiguration
+          .set("fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider")
+        sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.access.key", creds.accessKeyId)
+        sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.secret.key", creds.secretAccessKey)
+        sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.session.token", creds.sessionToken)
+      case None =>
+        val local_credentials_provider = List(
+          "com.amazonaws.auth.ContainerCredentialsProvider",
+          "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+        ).mkString(",")
+        if (assumeRoleArn == null) {
+          sparkSession.sparkContext.hadoopConfiguration
+            .set("fs.s3a.aws.credentials.provider", local_credentials_provider)
+        } else {
+          val credentials_provider = "org.apache.hadoop.fs.s3a.auth.AssumedRoleCredentialProvider"
+          sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.aws.credentials.provider", credentials_provider)
+          sparkSession.sparkContext.hadoopConfiguration
+            .set("fs.s3a.assumed.role.credentials.provider", local_credentials_provider)
+          sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.assumed.role.arn", assumeRoleArn)
+        }
     }
 
     sparkSession.sparkContext.hadoopConfiguration
@@ -101,20 +112,30 @@ object SparkSessionInitializer {
       resolvedOutputS3Uri: String,
       dataCatalogName: String,
       assumeRoleArn: String,
-      region: String
+      region: String,
+      lfCredentials: Option[LakeFormationCredentials] = None
   ): Unit = {
 
     if (offlineStoreEncryptionKmsKeyId != null) {
       sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.s3.sse.key", offlineStoreEncryptionKmsKeyId)
     }
 
-    if (assumeRoleArn != null) {
-      sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.client.assume-role.arn", assumeRoleArn)
-      sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.client.assume-role.region", region)
-      sparkSession.conf.set(
-        f"spark.sql.catalog.$dataCatalogName.client.factory",
-        "org.apache.iceberg.aws.AssumeRoleAwsClientFactory"
-      )
+    lfCredentials match {
+      case Some(creds) =>
+        sparkSession.sparkContext.hadoopConfiguration
+          .set("fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider")
+        sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.access.key", creds.accessKeyId)
+        sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.secret.key", creds.secretAccessKey)
+        sparkSession.sparkContext.hadoopConfiguration.set("fs.s3a.session.token", creds.sessionToken)
+      case None =>
+        if (assumeRoleArn != null) {
+          sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.client.assume-role.arn", assumeRoleArn)
+          sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.client.assume-role.region", region)
+          sparkSession.conf.set(
+            f"spark.sql.catalog.$dataCatalogName.client.factory",
+            "org.apache.iceberg.aws.AssumeRoleAwsClientFactory"
+          )
+        }
     }
 
     sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.s3.sse.type", "kms")

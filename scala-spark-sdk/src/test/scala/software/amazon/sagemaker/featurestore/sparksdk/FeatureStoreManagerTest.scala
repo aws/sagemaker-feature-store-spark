@@ -13,6 +13,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.assertEquals
 import org.testng.annotations.{AfterTest, BeforeMethod, DataProvider, Test}
+import software.amazon.awssdk.services.glue.GlueClient
 import software.amazon.awssdk.services.sagemaker.SageMakerClient
 import software.amazon.awssdk.services.sagemaker.model.{
   DataCatalogConfig,
@@ -60,6 +61,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
   private final val mockedSageMakerFeatureStoreRuntimeClientBuilder = mock[SageMakerFeatureStoreRuntimeClientBuilder]
   private final val mockedSageMakerClient                           = mock[SageMakerClient]
   private final val mockedSageMakerFeatureStoreRuntimeClient        = mock[SageMakerFeatureStoreRuntimeClient]
+  private final val mockedGlueClient                                = mock[GlueClient]
   private final val putRecordRequestCaptor                          = ArgCaptor[PutRecordRequest]
 
   @BeforeMethod
@@ -67,6 +69,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
     ClientFactory.skipInitialization = true
     ClientFactory.sageMakerClient = mockedSageMakerClient
     ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder = mockedSageMakerFeatureStoreRuntimeClientBuilder
+    ClientFactory.glueClient = mockedGlueClient
 
     when(mockedSageMakerFeatureStoreRuntimeClientBuilder.build()).thenReturn(mockedSageMakerFeatureStoreRuntimeClient)
     when(mockedSageMakerFeatureStoreRuntimeClient.putRecord(any(classOf[PutRecordRequest])))
@@ -294,7 +297,15 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
     withObjectMocked[SparkSessionInitializer.type] {
       doNothing()
         .when(SparkSessionInitializer)
-        .initializeSparkSessionForIcebergTable(any(), anyString(), anyString(), anyString(), anyString(), anyString())
+        .initializeSparkSessionForIcebergTable(
+          any(),
+          anyString(),
+          anyString(),
+          anyString(),
+          anyString(),
+          anyString(),
+          any()
+        )
 
       // Create a local derby local database which enables to create local metastores for unit tests
       sparkSession.conf.set("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")

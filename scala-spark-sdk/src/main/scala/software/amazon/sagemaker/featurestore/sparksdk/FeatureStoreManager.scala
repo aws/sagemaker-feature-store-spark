@@ -47,6 +47,7 @@ import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
   ClientFactory,
   DataFrameRepartitioner,
   FeatureGroupArnResolver,
+  LakeFormationHelper,
   SparkSessionInitializer
 }
 
@@ -84,6 +85,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
     val featureGroupName        = featureGroupArn
     val region                  = featureGroupArnResolver.resolveRegion()
+    val accountId               = featureGroupArnResolver.resolveAccountId()
 
     ClientFactory.initialize(region = region, roleArn = assumeRoleArn)
 
@@ -106,7 +108,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         validatedInputDataFrame,
         describeResponse,
         eventTimeFeatureName,
-        region
+        region,
+        accountId
       )
     }
   }
@@ -250,7 +253,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       dataFrame: DataFrame,
       describeResponse: DescribeFeatureGroupResponse,
       eventTimeFeatureName: String,
-      region: String
+      region: String,
+      accountId: String
   ): Unit = {
 
     if (!isFeatureGroupOfflineStoreEnabled(describeResponse)) {
@@ -263,6 +267,16 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       describeResponse.offlineStoreConfig().s3StorageConfig().kmsKeyId()
     val tableFormat         = describeResponse.offlineStoreConfig().tableFormat()
     val destinationFilePath = generateDestinationFilePath(describeResponse)
+
+    val lfCredentials = Option(describeResponse.offlineStoreConfig().dataCatalogConfig()).flatMap { dataCatalogConfig =>
+      val database  = dataCatalogConfig.database().toLowerCase()
+      val tableName = dataCatalogConfig.tableName().toLowerCase()
+      val partition = new FeatureGroupArnResolver(describeResponse.featureGroupArn()).resolvePartition()
+      LakeFormationHelper.checkAndVendCredentials(region, accountId, partition, database, tableName)
+    }
+
+    val refreshedLfCredentials = lfCredentials.flatMap(LakeFormationHelper.refreshIfNeeded)
+
     val tempDataFrame = dataFrame
       .withColumn("api_invocation_time", current_timestamp())
       .withColumn("write_time", current_timestamp())
@@ -280,7 +294,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         resolvedOutputS3Uri,
         dataCatalogName,
         assumeRoleArn,
-        region
+        region,
+        refreshedLfCredentials
       )
 
       tempDataFrame
@@ -293,7 +308,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         dataFrame.sparkSession,
         offlineStoreEncryptionKeyId,
         assumeRoleArn,
-        region
+        region,
+        refreshedLfCredentials
       )
 
       val offlineDataFrame = tempDataFrame
