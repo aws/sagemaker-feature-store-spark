@@ -42,6 +42,7 @@ import software.amazon.awssdk.services.sagemaker.model.{
 }
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.SageMakerFeatureStoreRuntimeClient
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{FeatureValue, PutRecordRequest, TargetStore}
+import org.slf4j.LoggerFactory
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.{StreamIngestionFailureException, ValidationError}
 import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
   ClientFactory,
@@ -56,6 +57,8 @@ import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
 class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
+
+  private val logger = LoggerFactory.getLogger(this.getClass)
 
   val SPARK_TYPE_TO_FEATURE_TYPE_MAP: Map[DataType, FeatureType] = Map(
     StringType  -> FeatureType.STRING,
@@ -80,7 +83,16 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
    *  @param targetStores
    *    choose the target store to ingest the data
    */
-  def ingestData(inputDataFrame: DataFrame, featureGroupArn: String, targetStores: List[String] = null): Unit = {
+  def ingestData(
+      inputDataFrame: DataFrame,
+      featureGroupArn: String,
+      targetStores: List[String] = null,
+      useLakeFormationCreds: Boolean = true
+  ): Unit = {
+
+    logger.info(
+      s"ingestData: featureGroupArn=$featureGroupArn, targetStores=$targetStores, useLakeFormationCreds=$useLakeFormationCreds"
+    )
 
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
     val featureGroupName        = featureGroupArn
@@ -109,7 +121,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         describeResponse,
         eventTimeFeatureName,
         region,
-        accountId
+        accountId,
+        useLakeFormationCreds
       )
     }
   }
@@ -117,9 +130,15 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
   def ingestDataInJava(
       inputDataFrame: org.apache.spark.sql.Dataset[Row],
       featureGroupArn: java.lang.String,
-      targetStores: java.util.ArrayList[String] = null
+      targetStores: java.util.ArrayList[String] = null,
+      useLakeFormationCreds: java.lang.Boolean = true
   ): Unit = {
-    ingestData(inputDataFrame, featureGroupArn, if (targetStores != null) targetStores.asScala.toList else null)
+    ingestData(
+      inputDataFrame,
+      featureGroupArn,
+      if (targetStores != null) targetStores.asScala.toList else null,
+      useLakeFormationCreds.booleanValue()
+    )
   }
 
   /** Load feature definitions according to the schema of input data frame.
@@ -254,7 +273,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       describeResponse: DescribeFeatureGroupResponse,
       eventTimeFeatureName: String,
       region: String,
-      accountId: String
+      accountId: String,
+      useLakeFormationCreds: Boolean = true
   ): Unit = {
 
     if (!isFeatureGroupOfflineStoreEnabled(describeResponse)) {
@@ -268,14 +288,26 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val tableFormat         = describeResponse.offlineStoreConfig().tableFormat()
     val destinationFilePath = generateDestinationFilePath(describeResponse)
 
-    val lfCredentials = Option(describeResponse.offlineStoreConfig().dataCatalogConfig()).flatMap { dataCatalogConfig =>
-      val database  = dataCatalogConfig.database().toLowerCase()
-      val tableName = dataCatalogConfig.tableName().toLowerCase()
-      val partition = new FeatureGroupArnResolver(describeResponse.featureGroupArn()).resolvePartition()
-      LakeFormationHelper.checkAndVendCredentials(region, accountId, partition, database, tableName)
+    val lfCredentials = if (useLakeFormationCreds) {
+      val dataCatalogConfig = describeResponse.offlineStoreConfig().dataCatalogConfig()
+      logger.info(s"dataCatalogConfig=${if (dataCatalogConfig != null)
+        s"database=${dataCatalogConfig.database()}, table=${dataCatalogConfig.tableName()}"
+      else "null"}")
+      Option(dataCatalogConfig).flatMap { dcc =>
+        val database  = dcc.database().toLowerCase()
+        val tableName = dcc.tableName().toLowerCase()
+        val partition = new FeatureGroupArnResolver(describeResponse.featureGroupArn()).resolvePartition()
+        LakeFormationHelper.checkAndVendCredentials(region, accountId, partition, database, tableName)
+      }
+    } else {
+      logger.info("LakeFormation credential vending disabled by caller")
+      None
     }
 
+
     val refreshedLfCredentials = lfCredentials.flatMap(LakeFormationHelper.refreshIfNeeded)
+
+    logger.info(s"refreshedLfCredentials=${if (refreshedLfCredentials.isDefined) "present" else "None"}")
 
     val tempDataFrame = dataFrame
       .withColumn("api_invocation_time", current_timestamp())

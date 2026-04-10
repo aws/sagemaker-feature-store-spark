@@ -31,17 +31,21 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         super(FeatureStoreManager, self).__init__()
         self._java_obj = self._new_java_obj(FeatureStoreManager._wrapped_class, assume_role_arn)
 
-    def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: str, target_stores: List[str] = None):
+    def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: str, target_stores: List[str] = None,
+                    use_lakeformation_creds: bool = True):
         """
         Batch ingest data into SageMaker FeatureStore.
 
         :param input_data_frame (DataFrame): the DataFrame to be ingested.
         :param feature_group_arn (str): target feature group arn.
         :param target_stores (List[str]): a list of target stores which the data should be ingested to.
+        :param use_lakeformation_creds (bool): whether to use LakeFormation credentials for offline store ingestion.
+            Defaults to True.
 
         :return:
         """
-        return self._call_java("ingestDataInJava", input_data_frame, feature_group_arn, target_stores)
+        return self._call_java("ingestDataInJava", input_data_frame, feature_group_arn, target_stores,
+                               use_lakeformation_creds)
 
     def load_feature_definitions_from_schema(self, input_data_frame: DataFrame):
         """

@@ -80,6 +80,7 @@ libraryDependencies ++= Seq(
   "org.apache.hadoop" % "hadoop-common" %  sparkVersionToHadoopVersionMap(majorSparkVersion) % Provided,
   "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
   "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
+  "org.slf4j" % "slf4j-api" % "1.7.36" % Provided,
 
   // Test dependencies
   "org.mockito" %% "mockito-scala-scalatest" % "1.17.12" % Test,
@@ -105,6 +106,7 @@ printClasspath := (Runtime / fullClasspath value) foreach { e => println(e.data)
 
 assembly / assemblyMergeStrategy := {
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case PathList("org", "slf4j", xs @ _*) => MergeStrategy.discard
   case x => MergeStrategy.first
 }
 

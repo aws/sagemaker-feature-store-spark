@@ -21,4 +21,33 @@ class FeatureGroupArnResolverTest extends TestNGSuite {
     assertEquals(resolver.resolveFeatureGroupName(), "test-feature-group")
     assertEquals(resolver.resolveRegion(), "us-west-2")
   }
+
+  @Test
+  def testResolveAccountId(): Unit = {
+    val resolver = new FeatureGroupArnResolver(TEST_FEATURE_GROUP_ARN)
+    assertEquals(resolver.resolveAccountId(), "123456789012")
+  }
+
+  @Test
+  def testResolvePartition(): Unit = {
+    val resolver = new FeatureGroupArnResolver(TEST_FEATURE_GROUP_ARN)
+    assertEquals(resolver.resolvePartition(), "aws")
+  }
+
+  @Test
+  def testResolvePartitionChina(): Unit = {
+    val resolver =
+      new FeatureGroupArnResolver("arn:aws-cn:sagemaker:cn-north-1:123456789012:feature-group/test-fg")
+    assertEquals(resolver.resolvePartition(), "aws-cn")
+    assertEquals(resolver.resolveAccountId(), "123456789012")
+    assertEquals(resolver.resolveRegion(), "cn-north-1")
+  }
+
+  @Test
+  def testResolvePartitionGovCloud(): Unit = {
+    val resolver =
+      new FeatureGroupArnResolver("arn:aws-us-gov:sagemaker:us-gov-west-1:123456789012:feature-group/test-fg")
+    assertEquals(resolver.resolvePartition(), "aws-us-gov")
+    assertEquals(resolver.resolveRegion(), "us-gov-west-1")
+  }
 }

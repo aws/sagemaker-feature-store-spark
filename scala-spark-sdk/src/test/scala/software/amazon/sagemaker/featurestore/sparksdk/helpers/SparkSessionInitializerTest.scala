@@ -5,6 +5,8 @@ import org.testng.annotations.{DataProvider, Test}
 import org.apache.spark.sql.SparkSession
 import org.testng.Assert.assertEquals
 
+import java.time.Instant
+
 class SparkSessionInitializerTest extends TestNGSuite {
 
   private final val sparkSession: SparkSession = SparkSession
@@ -139,6 +141,70 @@ class SparkSessionInitializerTest extends TestNGSuite {
     )
     assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.glue.skip-name-validation"), "true")
     assertEquals(sparkSession.conf.get(f"spark.sql.catalog.$dataCatalogName.glue.skip-archive"), "true")
+  }
+
+  @Test
+  def initializeSparkSessionForOfflineStoreWithLfCredentialsTest(): Unit = {
+    val creds = LakeFormationCredentials(
+      accessKeyId = "lf-ak",
+      secretAccessKey = "lf-sk",
+      sessionToken = "lf-st",
+      expiration = Instant.now().plusSeconds(3600),
+      region = "us-west-2",
+      accountId = "123456789012",
+      database = "db",
+      table = "tbl"
+    )
+
+    SparkSessionInitializer.initializeSparkSessionForOfflineStore(
+      sparkSession,
+      "kms-key",
+      null,
+      "us-west-2",
+      Some(creds)
+    )
+
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    assertEquals(
+      hadoopConf.get("fs.s3a.aws.credentials.provider"),
+      "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider"
+    )
+    assertEquals(hadoopConf.get("fs.s3a.access.key"), "lf-ak")
+    assertEquals(hadoopConf.get("fs.s3a.secret.key"), "lf-sk")
+    assertEquals(hadoopConf.get("fs.s3a.session.token"), "lf-st")
+  }
+
+  @Test
+  def initializeSparkSessionForIcebergTableWithLfCredentialsTest(): Unit = {
+    val creds = LakeFormationCredentials(
+      accessKeyId = "lf-ak2",
+      secretAccessKey = "lf-sk2",
+      sessionToken = "lf-st2",
+      expiration = Instant.now().plusSeconds(3600),
+      region = "us-west-2",
+      accountId = "123456789012",
+      database = "db",
+      table = "tbl"
+    )
+
+    SparkSessionInitializer.initializeSparkSessionForIcebergTable(
+      sparkSession,
+      "kms-key",
+      "s3://bucket/path",
+      "lf_catalog",
+      null,
+      "us-west-2",
+      Some(creds)
+    )
+
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    assertEquals(
+      hadoopConf.get("fs.s3a.aws.credentials.provider"),
+      "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider"
+    )
+    assertEquals(hadoopConf.get("fs.s3a.access.key"), "lf-ak2")
+    assertEquals(hadoopConf.get("fs.s3a.secret.key"), "lf-sk2")
+    assertEquals(hadoopConf.get("fs.s3a.session.token"), "lf-st2")
   }
 
   @DataProvider

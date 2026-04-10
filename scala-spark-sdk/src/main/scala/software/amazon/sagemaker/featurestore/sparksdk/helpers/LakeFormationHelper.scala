@@ -44,7 +44,7 @@ object LakeFormationHelper {
       case Success(true) =>
         vendCredentials(region, accountId, partition, database, table)
       case Success(false) =>
-        logger.info(s"Table $database.$table is not LF-managed, using default credentials")
+        logger.warn(s"Table $database.$table is not LF-managed, using default credentials")
         None
       case Failure(ex) =>
         logger.warn(
