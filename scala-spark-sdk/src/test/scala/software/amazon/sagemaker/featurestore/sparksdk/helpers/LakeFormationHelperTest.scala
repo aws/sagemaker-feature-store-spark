@@ -1,7 +1,8 @@
 package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
 import org.mockito.ArgumentMatchers.any
-import org.mockito.MockitoSugar.{mock, when}
+import org.mockito.Mockito
+import org.mockito.stubbing.Stubber
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.{assertEquals, assertFalse, assertTrue}
 import org.testng.annotations.{BeforeMethod, Test}
@@ -15,11 +16,17 @@ import java.time.Instant
 
 class LakeFormationHelperTest extends TestNGSuite {
 
-  private val mockGlueClient = mock[GlueClient]
-  private val mockLfClient   = mock[LakeFormationClient]
+  // Use Java Mockito API directly to avoid Scala 2.12 reflection issues with
+  // AWS SDK v2 builder inner classes (CyclicReference / no symbol could be loaded).
+  private val mockGlueClient = Mockito.mock(classOf[GlueClient])
+  private val mockLfClient   = Mockito.mock(classOf[LakeFormationClient])
+
+  // Disambiguate Mockito.doReturn overloads for Scala 2.12
+  private def stubReturn(value: Any): Stubber = Mockito.doReturn(value, Seq.empty[Object]: _*)
 
   @BeforeMethod
   def setup(): Unit = {
+    Mockito.reset(mockGlueClient, mockLfClient)
     ClientFactory.skipInitialization = true
     ClientFactory.glueClient = mockGlueClient
     ClientFactory.lakeFormationClient = mockLfClient
@@ -27,23 +34,29 @@ class LakeFormationHelperTest extends TestNGSuite {
 
   @Test
   def testCheckAndVendCredentialsWhenLfManaged(): Unit = {
-    when(mockGlueClient.getTable(any(classOf[GetTableRequest]))).thenReturn(
+
+    stubReturn(
       GetTableResponse
         .builder()
         .table(Table.builder().isRegisteredWithLakeFormation(true).build())
         .build()
     )
+      .when(mockGlueClient)
+      .getTable(any(classOf[GetTableRequest]))
+
     val expiration = Instant.now().plusSeconds(3600)
-    when(mockLfClient.getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest])))
-      .thenReturn(
-        GetTemporaryGlueTableCredentialsResponse
-          .builder()
-          .accessKeyId("ak")
-          .secretAccessKey("sk")
-          .sessionToken("st")
-          .expiration(expiration)
-          .build()
-      )
+
+    stubReturn(
+      GetTemporaryGlueTableCredentialsResponse
+        .builder()
+        .accessKeyId("ak")
+        .secretAccessKey("sk")
+        .sessionToken("st")
+        .expiration(expiration)
+        .build()
+    )
+      .when(mockLfClient)
+      .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
 
     val result = LakeFormationHelper.checkAndVendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
     assertTrue(result.isDefined)
@@ -55,12 +68,15 @@ class LakeFormationHelperTest extends TestNGSuite {
 
   @Test
   def testCheckAndVendCredentialsWhenNotLfManaged(): Unit = {
-    when(mockGlueClient.getTable(any(classOf[GetTableRequest]))).thenReturn(
+
+    stubReturn(
       GetTableResponse
         .builder()
         .table(Table.builder().isRegisteredWithLakeFormation(false).build())
         .build()
     )
+      .when(mockGlueClient)
+      .getTable(any(classOf[GetTableRequest]))
 
     val result = LakeFormationHelper.checkAndVendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
     assertFalse(result.isDefined)
@@ -68,8 +84,10 @@ class LakeFormationHelperTest extends TestNGSuite {
 
   @Test
   def testCheckAndVendCredentialsWhenGlueCallFails(): Unit = {
-    when(mockGlueClient.getTable(any(classOf[GetTableRequest])))
-      .thenThrow(new RuntimeException("Glue error"))
+    Mockito
+      .doThrow(new RuntimeException("Glue error"))
+      .when(mockGlueClient)
+      .getTable(any(classOf[GetTableRequest]))
 
     val result = LakeFormationHelper.checkAndVendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
     assertFalse(result.isDefined)
@@ -78,16 +96,18 @@ class LakeFormationHelperTest extends TestNGSuite {
   @Test
   def testVendCredentialsSuccess(): Unit = {
     val expiration = Instant.now().plusSeconds(3600)
-    when(mockLfClient.getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest])))
-      .thenReturn(
-        GetTemporaryGlueTableCredentialsResponse
-          .builder()
-          .accessKeyId("ak")
-          .secretAccessKey("sk")
-          .sessionToken("st")
-          .expiration(expiration)
-          .build()
-      )
+
+    stubReturn(
+      GetTemporaryGlueTableCredentialsResponse
+        .builder()
+        .accessKeyId("ak")
+        .secretAccessKey("sk")
+        .sessionToken("st")
+        .expiration(expiration)
+        .build()
+    )
+      .when(mockLfClient)
+      .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
 
     val result = LakeFormationHelper.vendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
     assertTrue(result.isDefined)
@@ -99,8 +119,10 @@ class LakeFormationHelperTest extends TestNGSuite {
 
   @Test
   def testVendCredentialsFailure(): Unit = {
-    when(mockLfClient.getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest])))
-      .thenThrow(new RuntimeException("LF error"))
+    Mockito
+      .doThrow(new RuntimeException("LF error"))
+      .when(mockLfClient)
+      .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
 
     val result = LakeFormationHelper.vendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
     assertFalse(result.isDefined)
@@ -109,16 +131,18 @@ class LakeFormationHelperTest extends TestNGSuite {
   @Test
   def testRefreshIfNeededWhenExpiringSoon(): Unit = {
     val expiration = Instant.now().plusSeconds(3600)
-    when(mockLfClient.getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest])))
-      .thenReturn(
-        GetTemporaryGlueTableCredentialsResponse
-          .builder()
-          .accessKeyId("new-ak")
-          .secretAccessKey("new-sk")
-          .sessionToken("new-st")
-          .expiration(expiration)
-          .build()
-      )
+
+    stubReturn(
+      GetTemporaryGlueTableCredentialsResponse
+        .builder()
+        .accessKeyId("new-ak")
+        .secretAccessKey("new-sk")
+        .sessionToken("new-st")
+        .expiration(expiration)
+        .build()
+    )
+      .when(mockLfClient)
+      .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
 
     val expiringSoonCreds = LakeFormationCredentials(
       accessKeyId = "old-ak",
@@ -157,16 +181,18 @@ class LakeFormationHelperTest extends TestNGSuite {
   @Test
   def testRefreshIfNeededChinaRegion(): Unit = {
     val expiration = Instant.now().plusSeconds(3600)
-    when(mockLfClient.getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest])))
-      .thenReturn(
-        GetTemporaryGlueTableCredentialsResponse
-          .builder()
-          .accessKeyId("cn-ak")
-          .secretAccessKey("cn-sk")
-          .sessionToken("cn-st")
-          .expiration(expiration)
-          .build()
-      )
+
+    stubReturn(
+      GetTemporaryGlueTableCredentialsResponse
+        .builder()
+        .accessKeyId("cn-ak")
+        .secretAccessKey("cn-sk")
+        .sessionToken("cn-st")
+        .expiration(expiration)
+        .build()
+    )
+      .when(mockLfClient)
+      .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
 
     val expiringSoonCreds = LakeFormationCredentials(
       accessKeyId = "old-ak",
@@ -187,16 +213,18 @@ class LakeFormationHelperTest extends TestNGSuite {
   @Test
   def testRefreshIfNeededGovCloudRegion(): Unit = {
     val expiration = Instant.now().plusSeconds(3600)
-    when(mockLfClient.getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest])))
-      .thenReturn(
-        GetTemporaryGlueTableCredentialsResponse
-          .builder()
-          .accessKeyId("gov-ak")
-          .secretAccessKey("gov-sk")
-          .sessionToken("gov-st")
-          .expiration(expiration)
-          .build()
-      )
+
+    stubReturn(
+      GetTemporaryGlueTableCredentialsResponse
+        .builder()
+        .accessKeyId("gov-ak")
+        .secretAccessKey("gov-sk")
+        .sessionToken("gov-st")
+        .expiration(expiration)
+        .build()
+    )
+      .when(mockLfClient)
+      .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
 
     val expiringSoonCreds = LakeFormationCredentials(
       accessKeyId = "old-ak",
