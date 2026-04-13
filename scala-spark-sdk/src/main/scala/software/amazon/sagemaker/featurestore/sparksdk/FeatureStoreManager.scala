@@ -304,7 +304,6 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       None
     }
 
-
     val refreshedLfCredentials = lfCredentials.flatMap(LakeFormationHelper.refreshIfNeeded)
 
     logger.info(s"refreshedLfCredentials=${if (refreshedLfCredentials.isDefined) "present" else "None"}")
