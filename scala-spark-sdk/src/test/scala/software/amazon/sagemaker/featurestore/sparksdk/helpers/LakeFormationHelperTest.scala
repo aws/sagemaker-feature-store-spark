@@ -6,8 +6,6 @@ import org.mockito.stubbing.Stubber
 import org.scalatestplus.testng.TestNGSuite
 import org.testng.Assert.{assertEquals, assertFalse, assertTrue}
 import org.testng.annotations.{BeforeMethod, Test}
-import software.amazon.awssdk.services.glue.GlueClient
-import software.amazon.awssdk.services.glue.model.{GetTableRequest, GetTableResponse, Table}
 import software.amazon.awssdk.services.lakeformation.LakeFormationClient
 import software.amazon.awssdk.services.lakeformation.model.GetTemporaryGlueTableCredentialsRequest
 import software.amazon.awssdk.services.lakeformation.model.GetTemporaryGlueTableCredentialsResponse
@@ -18,79 +16,16 @@ class LakeFormationHelperTest extends TestNGSuite {
 
   // Use Java Mockito API directly to avoid Scala 2.12 reflection issues with
   // AWS SDK v2 builder inner classes (CyclicReference / no symbol could be loaded).
-  private val mockGlueClient = Mockito.mock(classOf[GlueClient])
-  private val mockLfClient   = Mockito.mock(classOf[LakeFormationClient])
+  private val mockLfClient = Mockito.mock(classOf[LakeFormationClient])
 
   // Disambiguate Mockito.doReturn overloads for Scala 2.12
   private def stubReturn(value: Any): Stubber = Mockito.doReturn(value, Seq.empty[Object]: _*)
 
   @BeforeMethod
   def setup(): Unit = {
-    Mockito.reset(mockGlueClient, mockLfClient)
+    Mockito.reset(mockLfClient)
     ClientFactory.skipInitialization = true
-    ClientFactory.glueClient = mockGlueClient
     ClientFactory.lakeFormationClient = mockLfClient
-  }
-
-  @Test
-  def testCheckAndVendCredentialsWhenLfManaged(): Unit = {
-
-    stubReturn(
-      GetTableResponse
-        .builder()
-        .table(Table.builder().isRegisteredWithLakeFormation(true).build())
-        .build()
-    )
-      .when(mockGlueClient)
-      .getTable(any(classOf[GetTableRequest]))
-
-    val expiration = Instant.now().plusSeconds(3600)
-
-    stubReturn(
-      GetTemporaryGlueTableCredentialsResponse
-        .builder()
-        .accessKeyId("ak")
-        .secretAccessKey("sk")
-        .sessionToken("st")
-        .expiration(expiration)
-        .build()
-    )
-      .when(mockLfClient)
-      .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
-
-    val result = LakeFormationHelper.checkAndVendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
-    assertTrue(result.isDefined)
-    assertEquals(result.get.accessKeyId, "ak")
-    assertEquals(result.get.secretAccessKey, "sk")
-    assertEquals(result.get.sessionToken, "st")
-    assertEquals(result.get.expiration, expiration)
-  }
-
-  @Test
-  def testCheckAndVendCredentialsWhenNotLfManaged(): Unit = {
-
-    stubReturn(
-      GetTableResponse
-        .builder()
-        .table(Table.builder().isRegisteredWithLakeFormation(false).build())
-        .build()
-    )
-      .when(mockGlueClient)
-      .getTable(any(classOf[GetTableRequest]))
-
-    val result = LakeFormationHelper.checkAndVendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
-    assertFalse(result.isDefined)
-  }
-
-  @Test
-  def testCheckAndVendCredentialsWhenGlueCallFails(): Unit = {
-    Mockito
-      .doThrow(new RuntimeException("Glue error"))
-      .when(mockGlueClient)
-      .getTable(any(classOf[GetTableRequest]))
-
-    val result = LakeFormationHelper.checkAndVendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
-    assertFalse(result.isDefined)
   }
 
   @Test
@@ -151,6 +86,7 @@ class LakeFormationHelperTest extends TestNGSuite {
       expiration = Instant.now().plusSeconds(60),
       region = "us-west-2",
       accountId = "123456789012",
+      partition = "aws",
       database = "db",
       table = "tbl"
     )
@@ -169,6 +105,7 @@ class LakeFormationHelperTest extends TestNGSuite {
       expiration = Instant.now().plusSeconds(3600),
       region = "us-west-2",
       accountId = "123456789012",
+      partition = "aws",
       database = "db",
       table = "tbl"
     )
@@ -201,6 +138,7 @@ class LakeFormationHelperTest extends TestNGSuite {
       expiration = Instant.now().plusSeconds(60),
       region = "cn-north-1",
       accountId = "123456789012",
+      partition = "aws-cn",
       database = "db",
       table = "tbl"
     )
@@ -233,6 +171,7 @@ class LakeFormationHelperTest extends TestNGSuite {
       expiration = Instant.now().plusSeconds(60),
       region = "us-gov-west-1",
       accountId = "123456789012",
+      partition = "aws-us-gov",
       database = "db",
       table = "tbl"
     )

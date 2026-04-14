@@ -152,6 +152,7 @@ class SparkSessionInitializerTest extends TestNGSuite {
       expiration = Instant.now().plusSeconds(3600),
       region = "us-west-2",
       accountId = "123456789012",
+      partition = "aws",
       database = "db",
       table = "tbl"
     )
@@ -183,6 +184,7 @@ class SparkSessionInitializerTest extends TestNGSuite {
       expiration = Instant.now().plusSeconds(3600),
       region = "us-west-2",
       accountId = "123456789012",
+      partition = "aws",
       database = "db",
       table = "tbl"
     )

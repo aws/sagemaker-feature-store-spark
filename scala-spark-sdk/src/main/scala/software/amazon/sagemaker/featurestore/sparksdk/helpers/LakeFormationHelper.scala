@@ -17,42 +17,18 @@
 package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
 import org.slf4j.LoggerFactory
-import software.amazon.awssdk.services.glue.model.GetTableRequest
 import software.amazon.awssdk.services.lakeformation.model.{GetTemporaryGlueTableCredentialsRequest, Permission}
 
 import scala.util.{Failure, Success, Try}
 
 object LakeFormationHelper {
 
-  private val logger                      = LoggerFactory.getLogger(this.getClass)
+  private val logger = LoggerFactory.getLogger(this.getClass)
+
+  // Credential duration is currently hardcoded. For long-running Spark jobs exceeding 1 hour,
+  // credentials will be refreshed automatically via refreshIfNeeded before they expire.
   private val CREDENTIAL_DURATION_SECONDS = 3600
   private val REFRESH_BUFFER_SECONDS      = 300
-
-  def checkAndVendCredentials(
-      region: String,
-      accountId: String,
-      partition: String,
-      database: String,
-      table: String
-  ): Option[LakeFormationCredentials] = {
-    Try {
-      val response = ClientFactory.glueClient.getTable(
-        GetTableRequest.builder().databaseName(database).name(table).build()
-      )
-      Option(response.table().isRegisteredWithLakeFormation()).exists(_.booleanValue())
-    } match {
-      case Success(true) =>
-        vendCredentials(region, accountId, partition, database, table)
-      case Success(false) =>
-        logger.warn(s"Table $database.$table is not LF-managed, using default credentials")
-        None
-      case Failure(ex) =>
-        logger.warn(
-          s"Failed to check LF status for $database.$table, falling back to default credentials: ${ex.getMessage}"
-        )
-        None
-    }
-  }
 
   def vendCredentials(
       region: String,
@@ -62,7 +38,7 @@ object LakeFormationHelper {
       table: String
   ): Option[LakeFormationCredentials] = {
     val tableArn = buildGlueTableArn(partition, region, accountId, database, table)
-    logger.info(s"Vending LF credentials for table ARN: $tableArn")
+    logger.debug(s"Vending LF credentials for table ARN: $tableArn")
     Try {
       val response = ClientFactory.lakeFormationClient.getTemporaryGlueTableCredentials(
         GetTemporaryGlueTableCredentialsRequest
@@ -79,12 +55,13 @@ object LakeFormationHelper {
         expiration = response.expiration(),
         region = region,
         accountId = accountId,
+        partition = partition,
         database = database,
         table = table
       )
     } match {
       case Success(creds) =>
-        logger.info(s"Vended LF credentials for $database.$table, expires at ${creds.expiration}")
+        logger.debug(s"Vended LF credentials for $database.$table, expires at ${creds.expiration}")
         Some(creds)
       case Failure(ex) =>
         logger.warn(
@@ -96,11 +73,11 @@ object LakeFormationHelper {
 
   def refreshIfNeeded(credentials: LakeFormationCredentials): Option[LakeFormationCredentials] = {
     if (credentials.isExpiringSoon(REFRESH_BUFFER_SECONDS)) {
-      logger.info(s"LF credentials expiring soon, refreshing for ${credentials.database}.${credentials.table}")
+      logger.debug(s"LF credentials expiring soon, refreshing for ${credentials.database}.${credentials.table}")
       vendCredentials(
         credentials.region,
         credentials.accountId,
-        buildPartitionFromRegion(credentials.region),
+        credentials.partition,
         credentials.database,
         credentials.table
       )

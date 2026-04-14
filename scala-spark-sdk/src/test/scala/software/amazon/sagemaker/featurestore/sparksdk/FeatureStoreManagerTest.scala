@@ -310,7 +310,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
         )
 
         verify(LakeFormationHelper, times(0))
-          .checkAndVendCredentials(anyString(), anyString(), anyString(), anyString(), anyString())
+          .vendCredentials(anyString(), anyString(), anyString(), anyString(), anyString())
       }
     }
 

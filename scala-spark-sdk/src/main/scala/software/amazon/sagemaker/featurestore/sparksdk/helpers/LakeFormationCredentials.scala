@@ -25,10 +25,14 @@ case class LakeFormationCredentials(
     expiration: Instant,
     region: String,
     accountId: String,
+    partition: String,
     database: String,
     table: String
 ) {
   def isExpiringSoon(bufferSeconds: Int): Boolean = {
     Instant.now().plusSeconds(bufferSeconds).isAfter(expiration)
   }
+
+  override def toString: String =
+    s"LakeFormationCredentials(accessKeyId=${accessKeyId.take(4)}***, expiration=$expiration, database=$database, table=$table)"
 }

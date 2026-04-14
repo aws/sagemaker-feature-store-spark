@@ -82,6 +82,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
    *    arn of a feature group.
    *  @param targetStores
    *    choose the target store to ingest the data
+   *  @param useLakeFormationCreds
+   *    whether to use LakeFormation credentials for offline store ingestion (default: true)
    */
   def ingestData(
       inputDataFrame: DataFrame,
@@ -137,7 +139,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       inputDataFrame,
       featureGroupArn,
       if (targetStores != null) targetStores.asScala.toList else null,
-      useLakeFormationCreds.booleanValue()
+      Option(useLakeFormationCreds).map(_.booleanValue()).getOrElse(true)
     )
   }
 
@@ -297,7 +299,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         val database  = dcc.database().toLowerCase()
         val tableName = dcc.tableName().toLowerCase()
         val partition = new FeatureGroupArnResolver(describeResponse.featureGroupArn()).resolvePartition()
-        LakeFormationHelper.checkAndVendCredentials(region, accountId, partition, database, tableName)
+        LakeFormationHelper.vendCredentials(region, accountId, partition, database, tableName)
       }
     } else {
       logger.info("LakeFormation credential vending disabled by caller")
