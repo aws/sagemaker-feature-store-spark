@@ -28,7 +28,7 @@ def test_feature_store_manager_methods():
         # Assert call _call_java method of the wrapper with all parameters passed correctly
         java_method_invocation.assert_called_with("ingestDataInJava", None, "test-arn", ["OnlineStore"], True)
 
-        feature_store_manager.ingest_data(None, "test-arn", ["OfflineStore"], use_lakeformation_creds=False)
+        feature_store_manager.ingest_data(None, "test-arn", ["OfflineStore"], use_lake_formation_credentials=False)
         java_method_invocation.assert_called_with("ingestDataInJava", None, "test-arn", ["OfflineStore"], False)
 
         feature_store_manager.get_failed_stream_ingestion_data_frame()

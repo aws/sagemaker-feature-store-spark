@@ -82,18 +82,18 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
    *    arn of a feature group.
    *  @param targetStores
    *    choose the target store to ingest the data
-   *  @param useLakeFormationCreds
-   *    whether to use LakeFormation credentials for offline store ingestion (default: true)
+   *  @param useLakeFormationCredentials
+   *    whether to use LakeFormation for offline store ingestion (default: false)
    */
   def ingestData(
       inputDataFrame: DataFrame,
       featureGroupArn: String,
       targetStores: List[String] = null,
-      useLakeFormationCreds: Boolean = true
+      useLakeFormationCredentials: Boolean = false
   ): Unit = {
 
     logger.info(
-      s"ingestData: featureGroupArn=$featureGroupArn, targetStores=$targetStores, useLakeFormationCreds=$useLakeFormationCreds"
+      s"ingestData: featureGroupArn=$featureGroupArn, targetStores=$targetStores, useLakeFormationCredentials=$useLakeFormationCredentials"
     )
 
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
@@ -124,7 +124,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         eventTimeFeatureName,
         region,
         accountId,
-        useLakeFormationCreds
+        useLakeFormationCredentials
       )
     }
   }
@@ -133,13 +133,13 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       inputDataFrame: org.apache.spark.sql.Dataset[Row],
       featureGroupArn: java.lang.String,
       targetStores: java.util.ArrayList[String] = null,
-      useLakeFormationCreds: java.lang.Boolean = true
+      useLakeFormationCredentials: java.lang.Boolean = false
   ): Unit = {
     ingestData(
       inputDataFrame,
       featureGroupArn,
       if (targetStores != null) targetStores.asScala.toList else null,
-      Option(useLakeFormationCreds).map(_.booleanValue()).getOrElse(true)
+      Option(useLakeFormationCredentials).map(_.booleanValue()).getOrElse(false)
     )
   }
 
@@ -276,7 +276,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       eventTimeFeatureName: String,
       region: String,
       accountId: String,
-      useLakeFormationCreds: Boolean = true
+      useLakeFormationCredentials: Boolean = false
   ): Unit = {
 
     if (!isFeatureGroupOfflineStoreEnabled(describeResponse)) {
@@ -290,7 +290,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val tableFormat         = describeResponse.offlineStoreConfig().tableFormat()
     val destinationFilePath = generateDestinationFilePath(describeResponse)
 
-    val lfCredentials = if (useLakeFormationCreds) {
+    val lfCredentials = if (useLakeFormationCredentials) {
       val dataCatalogConfig = describeResponse.offlineStoreConfig().dataCatalogConfig()
       logger.info(s"dataCatalogConfig=${if (dataCatalogConfig != null)
         s"database=${dataCatalogConfig.database()}, table=${dataCatalogConfig.tableName()}"

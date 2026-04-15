@@ -303,7 +303,7 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
           inputDataFrame,
           TEST_FEATURE_GROUP_ARN,
           List("OfflineStore"),
-          useLakeFormationCreds = false
+          useLakeFormationCredentials = false
         )
 
         verify(LakeFormationHelper, times(0))
