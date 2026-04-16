@@ -128,6 +128,132 @@ feature_definitions = feature_store_manager.load_feature_definitions_from_schema
 
 After the feature definitions are returned, you can create feature groups using `CreateFeatureGroup` API.
 
+## Lake Formation Credential Vending
+
+When your offline store's S3 location is registered with [AWS Lake Formation](https://aws.amazon.com/lake-formation/), the Spark connector can vend temporary credentials scoped to the table's data location instead of relying on the caller's IAM permissions for S3 access.
+
+### Usage
+
+#### Scala
+
+```scala
+val featureStoreManager = new FeatureStoreManager()
+featureStoreManager.ingestData(
+  dataFrame,
+  featureGroupArn,
+  directOfflineStore = true,
+  useLakeFormationCredentials = true
+)
+```
+
+#### Python
+
+```python
+feature_store_manager = FeatureStoreManager()
+feature_store_manager.ingest_data(
+    input_data_frame=df,
+    feature_group_arn=feature_group_arn,
+    direct_offline_store=True,
+    use_lake_formation_credentials=True
+)
+```
+
+### Prerequisites
+
+1. The offline store S3 location must be [registered with Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/register-data-lake.html).
+   You can use the [SageMaker Python SDK](https://github.com/aws/sagemaker-python-sdk) to enable Lake Formation governance of a Feature Group's offline store.
+2. The IAM role running the Spark job must have `lakeformation:GetDataAccess` permission.
+3. The Lake Formation table must have `SELECT`, `INSERT`, and `DESCRIBE` permissions granted to the caller.
+
+### Cross-Account Access
+
+The connector supports cross-account credential vending. This allows a Spark job running in Account B to ingest data into a feature group owned by Account A, as long as the appropriate permissions are in place.
+
+The feature group ARN contains the owning account's ID, which the connector uses to build the Glue table ARN for credential vending. No additional connector configuration is needed for cross-account access.
+
+#### Cross-Account Prerequisites
+
+1. **Lake Formation grant** (run as Account A, the data owner):
+   ```bash
+   aws lakeformation grant-permissions \
+     --principal DataLakePrincipalIdentifier=<account-b-id> \
+     --resource '{"Table":{"DatabaseName":"<database>","Name":"<table>","CatalogId":"<account-a-id>"}}' \
+     --permissions SELECT DESCRIBE INSERT \
+     --region <region>
+   ```
+
+2. **Glue cross-account access** (run as Account A):
+   ```bash
+   aws glue put-resource-policy \
+     --enable-hybrid TRUE \
+     --policy-in-json '{
+       "Version": "2012-10-17",
+       "Statement": [{
+         "Effect": "Allow",
+         "Principal": {"AWS": "<account-b-id>"},
+         "Action": ["glue:GetTable", "glue:GetDatabase", "glue:GetTables"],
+         "Resource": [
+           "arn:aws:glue:<region>:<account-a-id>:catalog",
+           "arn:aws:glue:<region>:<account-a-id>:database/<database>",
+           "arn:aws:glue:<region>:<account-a-id>:table/<database>/*"
+         ]
+       }]
+     }' \
+     --region <region>
+   ```
+   > **Note:** The `--enable-hybrid TRUE` flag is required if Account A uses Lake Formation hybrid access mode.
+
+3. **Account B IAM permissions**: The role running the Spark job needs `lakeformation:GetDataAccess` and `sagemaker:DescribeFeatureGroup` on Account A's feature group.
+
+### Troubleshooting
+
+If credential vending fails, check the following:
+
+1. **`AccessDeniedException: not authorized to perform lakeformation:GetDataAccess`**
+   - The Lake Formation table grant is missing. Run the `grant-permissions` command above from the data owner's account.
+   - Verify the grant exists:
+     ```bash
+     aws lakeformation list-permissions \
+       --resource '{"Table":{"DatabaseName":"<database>","Name":"<table>","CatalogId":"<account-a-id>"}}' \
+       --region <region>
+     ```
+
+2. **`AccessDeniedException: Insufficient Glue permissions to access table`**
+   - The Glue resource policy is missing or does not include the caller's account. Run the `put-resource-policy` command above.
+   - Verify the policy:
+     ```bash
+     aws glue get-resource-policy --region <region>
+     ```
+
+3. **`AccessDeniedException: not authorized to perform glue:GetTable`**
+   - Same as above — the Glue resource policy needs to allow `glue:GetTable` for the caller's account on the data owner's catalog.
+
+4. **Credentials vended but S3 access denied**
+   - The S3 location may not be registered with Lake Formation. Verify:
+     ```bash
+     aws lakeformation list-resources --region <region>
+     ```
+     Ensure the offline store S3 path appears in the registered locations.
+   - The Lake Formation data access role may not have S3 permissions on the actual bucket/prefix.
+
+5. **General debugging**
+   - Confirm caller identity: `aws sts get-caller-identity`
+   - Confirm the feature group's offline store config:
+     ```bash
+     aws sagemaker describe-feature-group \
+       --feature-group-name <feature-group-arn> \
+       --region <region> \
+       --query 'OfflineStoreConfig.DataCatalogConfig'
+     ```
+   - Test credential vending directly:
+     ```bash
+     aws lakeformation get-temporary-glue-table-credentials \
+       --table-arn "arn:aws:glue:<region>:<account-a-id>:table/<database>/<table>" \
+       --permissions SELECT INSERT DESCRIBE \
+       --duration-seconds 900 \
+       --region <region>
+     ```
+
 ## Development
 
 ### New Features
