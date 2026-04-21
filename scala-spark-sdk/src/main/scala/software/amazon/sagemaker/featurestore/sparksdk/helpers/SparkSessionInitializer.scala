@@ -17,8 +17,49 @@
 package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
 import org.apache.spark.sql.SparkSession
+import org.slf4j.LoggerFactory
 
 object SparkSessionInitializer {
+
+  private val logger = LoggerFactory.getLogger(this.getClass)
+
+  // Fail-fast configuration of the S3A magic committer for Spark parquet writes.
+  // Required whenever Lake Formation vends credentials scoped to a single S3 prefix:
+  // the default FileOutputCommitter performs rename() and _temporary/ cleanup that
+  // touches paths outside the scoped prefix, causing 403 errors. The magic committer
+  // uses S3 multipart uploads and stays strictly within the destination prefix.
+  //
+  // Requires spark-hadoop-cloud on the classpath (bundled on EMR/Glue; for standalone
+  // PySpark add `--packages org.apache.spark:spark-hadoop-cloud_2.12:<spark-version>`).
+  private val PATH_OUTPUT_COMMIT_PROTOCOL = "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
+  private val BINDING_PARQUET_COMMITTER   = "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter"
+
+  private def configureMagicCommitter(sparkSession: SparkSession): Unit = {
+    // Use the thread context classloader so we see jars loaded via spark.jars.packages,
+    // not just the classloader that loaded this SDK.
+    val classLoader =
+      Option(Thread.currentThread().getContextClassLoader).getOrElse(getClass.getClassLoader)
+    try {
+      Class.forName(PATH_OUTPUT_COMMIT_PROTOCOL, false, classLoader)
+    } catch {
+      case _: ClassNotFoundException =>
+        val msg =
+          s"$PATH_OUTPUT_COMMIT_PROTOCOL not found on classpath. Lake Formation credential " +
+            "vending requires the S3A magic committer, which is provided by spark-hadoop-cloud. " +
+            "Add it via spark-submit: --packages org.apache.spark:spark-hadoop-cloud_2.12:<spark-version>"
+        logger.error(msg)
+        throw new IllegalStateException(msg)
+    }
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    hadoopConf.set("fs.s3a.committer.name", "magic")
+    hadoopConf.set("fs.s3a.committer.magic.enabled", "true")
+    hadoopConf.set(
+      "mapreduce.outputcommitter.factory.scheme.s3a",
+      "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory"
+    )
+    sparkSession.conf.set("spark.sql.sources.commitProtocolClass", PATH_OUTPUT_COMMIT_PROTOCOL)
+    sparkSession.conf.set("spark.sql.parquet.output.committer.class", BINDING_PARQUET_COMMITTER)
+  }
 
   /** Initialize the spark session for offline store
    *
@@ -90,6 +131,12 @@ object SparkSessionInitializer {
     } else {
       sparkSession.sparkContext.hadoopConfiguration
         .set("fs.s3a.endpoint", s"s3.$region.amazonaws.com")
+    }
+
+    // Parquet writes with LF-vended credentials require the S3A magic committer because
+    // the default FileOutputCommitter touches paths outside the LF-scoped prefix.
+    if (lfCredentials.isDefined) {
+      configureMagicCommitter(sparkSession)
     }
   }
 

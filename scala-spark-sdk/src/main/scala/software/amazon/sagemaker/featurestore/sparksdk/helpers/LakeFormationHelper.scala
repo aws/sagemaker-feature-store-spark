@@ -44,7 +44,7 @@ object LakeFormationHelper {
         GetTemporaryGlueTableCredentialsRequest
           .builder()
           .tableArn(tableArn)
-          .permissions(Permission.SELECT, Permission.INSERT, Permission.DESCRIBE)
+          .permissions(Permission.SELECT, Permission.INSERT, Permission.DELETE, Permission.DESCRIBE)
           .durationSeconds(CREDENTIAL_DURATION_SECONDS)
           .build()
       )
