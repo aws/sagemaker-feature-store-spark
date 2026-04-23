@@ -16,7 +16,9 @@ class MinSparkVersionGateTest extends TestNGSuite {
   def requireSparkVersion36ThrowsOnSpark35BuildTest(): Unit = {
     try {
       MinSparkVersionGate.requireSparkVersion(3, 6)
-      fail("Expected UnsupportedOperationException from MinSparkVersionGate.requireSparkVersion(3, 6) on Spark 3.5 build")
+      fail(
+        "Expected UnsupportedOperationException from MinSparkVersionGate.requireSparkVersion(3, 6) on Spark 3.5 build"
+      )
     } catch {
       case e: UnsupportedOperationException =>
         assertTrue(e.getMessage.contains("3.6"), s"Message should contain '3.6': ${e.getMessage}")

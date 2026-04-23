@@ -29,27 +29,35 @@ object SparkSessionInitializer {
   // touches paths outside the scoped prefix, causing 403 errors. The magic committer
   // uses S3 multipart uploads and stays strictly within the destination prefix.
   //
-  // Requires spark-hadoop-cloud on the classpath (bundled on EMR/Glue; for standalone
-  // PySpark add `--packages org.apache.spark:spark-hadoop-cloud_2.12:<spark-version>`).
+  // Two supported runtimes:
+  //  - EMR 6.15+/7.x: ships a proprietary SQLEmrOptimizedCommitProtocol that wraps
+  //    the MagicV2 committer. We detect it and only set the hadoop-level
+  //    fs.s3a.committer.* configs; EMR's default commitProtocolClass handles the rest.
+  //  - Elsewhere (standalone PySpark, SageMaker Notebook, Glue): use the open-source
+  //    PathOutputCommitProtocol from spark-hadoop-cloud. Missing => fail fast.
   private val PATH_OUTPUT_COMMIT_PROTOCOL = "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol"
   private val BINDING_PARQUET_COMMITTER   = "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter"
+  private val EMR_COMMIT_PROTOCOL         = "org.apache.spark.sql.execution.datasources.SQLEmrOptimizedCommitProtocol"
+
+  private def classOnClasspath(name: String, classLoader: ClassLoader): Boolean =
+    try {
+      Class.forName(name, false, classLoader); true
+    } catch { case _: ClassNotFoundException => false }
 
   private def configureMagicCommitter(sparkSession: SparkSession): Unit = {
     // Use the thread context classloader so we see jars loaded via spark.jars.packages,
     // not just the classloader that loaded this SDK.
     val classLoader =
       Option(Thread.currentThread().getContextClassLoader).getOrElse(getClass.getClassLoader)
-    try {
-      Class.forName(PATH_OUTPUT_COMMIT_PROTOCOL, false, classLoader)
-    } catch {
-      case _: ClassNotFoundException =>
-        val msg =
-          s"$PATH_OUTPUT_COMMIT_PROTOCOL not found on classpath. Lake Formation credential " +
-            "vending requires the S3A magic committer, which is provided by spark-hadoop-cloud. " +
-            "Add it via spark-submit: --packages org.apache.spark:spark-hadoop-cloud_2.12:<spark-version>"
-        logger.error(msg)
-        throw new IllegalStateException(msg)
-    }
+    configureMagicCommitter(sparkSession, classOnClasspath(_, classLoader))
+  }
+
+  // Package-private for testing: callers inject a class-presence predicate so the EMR vs
+  // open-source vs missing branches can be exercised without manipulating the JVM classpath.
+  private[helpers] def configureMagicCommitter(
+      sparkSession: SparkSession,
+      classPresent: String => Boolean
+  ): Unit = {
     val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
     hadoopConf.set("fs.s3a.committer.name", "magic")
     hadoopConf.set("fs.s3a.committer.magic.enabled", "true")
@@ -57,8 +65,23 @@ object SparkSessionInitializer {
       "mapreduce.outputcommitter.factory.scheme.s3a",
       "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory"
     )
-    sparkSession.conf.set("spark.sql.sources.commitProtocolClass", PATH_OUTPUT_COMMIT_PROTOCOL)
-    sparkSession.conf.set("spark.sql.parquet.output.committer.class", BINDING_PARQUET_COMMITTER)
+
+    if (classPresent(EMR_COMMIT_PROTOCOL)) {
+      // EMR 6.15+/7.x: its SQLEmrOptimizedCommitProtocol is the default and already
+      // integrates with the MagicV2 committer. Do not override commitProtocolClass or
+      // the parquet output committer; EMR's defaults are correct.
+      logger.info(s"Detected $EMR_COMMIT_PROTOCOL; using EMR's default magic commit protocol")
+    } else if (classPresent(PATH_OUTPUT_COMMIT_PROTOCOL)) {
+      sparkSession.conf.set("spark.sql.sources.commitProtocolClass", PATH_OUTPUT_COMMIT_PROTOCOL)
+      sparkSession.conf.set("spark.sql.parquet.output.committer.class", BINDING_PARQUET_COMMITTER)
+    } else {
+      val msg =
+        s"Neither $EMR_COMMIT_PROTOCOL (EMR) nor $PATH_OUTPUT_COMMIT_PROTOCOL (spark-hadoop-cloud) " +
+          "found on classpath. Lake Formation credential vending requires an S3A magic committer. " +
+          "On non-EMR clusters, add: --packages org.apache.spark:spark-hadoop-cloud_2.12:<spark-version>"
+      logger.error(msg)
+      throw new IllegalStateException(msg)
+    }
   }
 
   /** Initialize the spark session for offline store

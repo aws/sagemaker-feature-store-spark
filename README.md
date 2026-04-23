@@ -168,23 +168,26 @@ feature_store_manager.ingest_data(
    You can use the [SageMaker Python SDK](https://github.com/aws/sagemaker-python-sdk) to enable Lake Formation governance of a Feature Group's offline store.
 2. The IAM role running the Spark job must have `lakeformation:GetDataAccess` permission.
 3. The Lake Formation table must have `SELECT`, `INSERT`, and `DESCRIBE` permissions granted to the caller.
-4. The Spark runtime must include the `spark-hadoop-cloud` module. When Lake Formation credentials are vended, the connector enables the Hadoop S3A magic committer, which requires `org.apache.spark.internal.io.cloud.PathOutputCommitProtocol` (shipped in `spark-hadoop-cloud_2.12`). This module is pre-installed on EMR and AWS Glue ETL. When running on standalone PySpark (SageMaker Notebook, a local dev environment, or any non-EMR/Glue cluster), add it at submit time, for example:
+4. An S3A magic committer implementation must be available. The connector enables the S3A magic committer to let Parquet writes stay within the Lake Formation-scoped S3 prefix.
 
-   ```bash
-   spark-submit \
-     --packages org.apache.spark:spark-hadoop-cloud_2.12:<spark-version> \
-     your_job.py
-   ```
+   - On **EMR 6.15+/7.x**: no action required. EMR ships its proprietary `SQLEmrOptimizedCommitProtocol` which the connector auto-detects and uses.
+   - On **AWS Glue**, **SageMaker Notebook**, **standalone PySpark**, or any other non-EMR runtime: add the open-source `spark-hadoop-cloud` module at submit time, for example:
 
-   Or when building the `SparkSession` programmatically:
+     ```bash
+     spark-submit \
+       --packages org.apache.spark:spark-hadoop-cloud_2.12:<spark-version> \
+       your_job.py
+     ```
 
-   ```python
-   SparkSession.builder \
-       .config("spark.jars.packages", "org.apache.spark:spark-hadoop-cloud_2.12:3.5.1") \
-       .getOrCreate()
-   ```
+     Or when building the `SparkSession` programmatically:
 
-   If this module is missing, the connector fails fast with a clear error describing how to add it.
+     ```python
+     SparkSession.builder \
+         .config("spark.jars.packages", "org.apache.spark:spark-hadoop-cloud_2.12:3.5.1") \
+         .getOrCreate()
+     ```
+
+   If neither is available on the classpath, the connector fails fast with a clear error describing how to add it.
 
 ### Cross-Account Access
 
