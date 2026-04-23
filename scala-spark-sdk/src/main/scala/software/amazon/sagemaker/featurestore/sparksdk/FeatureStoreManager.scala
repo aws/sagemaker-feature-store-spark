@@ -49,6 +49,7 @@ import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
   DataFrameRepartitioner,
   FeatureGroupArnResolver,
   LakeFormationHelper,
+  MinSparkVersionGate,
   SparkSessionInitializer
 }
 
@@ -291,6 +292,8 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val destinationFilePath = generateDestinationFilePath(describeResponse)
 
     val lfCredentials = if (useLakeFormationCredentials) {
+      // Build-time gate: on Spark <3.5 builds requireSparkVersion(3, 5) throws; on Spark 3.5+ it is a no-op.
+      MinSparkVersionGate.requireSparkVersion(3, 5)
       val dataCatalogConfig = describeResponse.offlineStoreConfig().dataCatalogConfig()
       logger.info(s"dataCatalogConfig=${if (dataCatalogConfig != null)
         s"database=${dataCatalogConfig.database()}, table=${dataCatalogConfig.tableName()}"

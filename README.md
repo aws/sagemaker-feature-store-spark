@@ -132,6 +132,10 @@ After the feature definitions are returned, you can create feature groups using 
 
 When your offline store's S3 location is registered with [AWS Lake Formation](https://aws.amazon.com/lake-formation/), the Spark connector can vend temporary credentials scoped to the table's data location instead of relying on the caller's IAM permissions for S3 access.
 
+### Version Requirements
+
+Lake Formation credential vending requires Spark/PySpark 3.5 or newer. On older Spark versions, the `use_lake_formation_credentials` / `useLakeFormationCredentials` parameter is not available (Scala) or will raise `ValueError` if set to `True` (Python).
+
 ### Usage
 
 #### Scala
@@ -164,6 +168,23 @@ feature_store_manager.ingest_data(
    You can use the [SageMaker Python SDK](https://github.com/aws/sagemaker-python-sdk) to enable Lake Formation governance of a Feature Group's offline store.
 2. The IAM role running the Spark job must have `lakeformation:GetDataAccess` permission.
 3. The Lake Formation table must have `SELECT`, `INSERT`, and `DESCRIBE` permissions granted to the caller.
+4. The Spark runtime must include the `spark-hadoop-cloud` module. When Lake Formation credentials are vended, the connector enables the Hadoop S3A magic committer, which requires `org.apache.spark.internal.io.cloud.PathOutputCommitProtocol` (shipped in `spark-hadoop-cloud_2.12`). This module is pre-installed on EMR and AWS Glue ETL. When running on standalone PySpark (SageMaker Notebook, a local dev environment, or any non-EMR/Glue cluster), add it at submit time, for example:
+
+   ```bash
+   spark-submit \
+     --packages org.apache.spark:spark-hadoop-cloud_2.12:<spark-version> \
+     your_job.py
+   ```
+
+   Or when building the `SparkSession` programmatically:
+
+   ```python
+   SparkSession.builder \
+       .config("spark.jars.packages", "org.apache.spark:spark-hadoop-cloud_2.12:3.5.1") \
+       .getOrCreate()
+   ```
+
+   If this module is missing, the connector fails fast with a clear error describing how to add it.
 
 ### Cross-Account Access
 

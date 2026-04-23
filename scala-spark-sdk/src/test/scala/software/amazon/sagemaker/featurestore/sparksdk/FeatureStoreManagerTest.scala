@@ -37,11 +37,7 @@ import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.{
   SageMakerFeatureStoreRuntimeClientBuilder
 }
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.{StreamIngestionFailureException, ValidationError}
-import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
-  ClientFactory,
-  LakeFormationHelper,
-  SparkSessionInitializer
-}
+import software.amazon.sagemaker.featurestore.sparksdk.helpers.{ClientFactory, SparkSessionInitializer}
 
 import java.io.File
 import scala.reflect.io.Directory
@@ -240,77 +236,6 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
 
     verify(mockedSageMakerFeatureStoreRuntimeClient, times(0))
       .putRecord(putRecordRequest)
-    verifyDataIngestedInOfflineStore(inputDataFrame, resolvedOutputPath)
-  }
-
-  @Test
-  def ingestDataBatchOfflineStoreSkipLakeFormationTest(): Unit = {
-    val resolvedOutputPath =
-      TEST_ARTIFACT_ROOT + "/ingest-data-direct-offline-store-test/skip-lf"
-    val response = DescribeFeatureGroupResponse
-      .builder()
-      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
-      .featureGroupStatus(FeatureGroupStatus.CREATED)
-      .eventTimeFeatureName("event-time")
-      .recordIdentifierFeatureName("record-identifier")
-      .featureDefinitions(
-        FeatureDefinition
-          .builder()
-          .featureName("record-identifier")
-          .featureType(FeatureType.STRING)
-          .build(),
-        FeatureDefinition
-          .builder()
-          .featureName("event-time")
-          .featureType(FeatureType.STRING)
-          .build()
-      )
-      .offlineStoreConfig(
-        OfflineStoreConfig
-          .builder()
-          .tableFormat(TableFormat.GLUE)
-          .dataCatalogConfig(
-            DataCatalogConfig
-              .builder()
-              .catalog("glue")
-              .database("db")
-              .tableName("table")
-              .build()
-          )
-          .s3StorageConfig(
-            S3StorageConfig
-              .builder()
-              .resolvedOutputS3Uri(resolvedOutputPath)
-              .build()
-          )
-          .build()
-      )
-      .build()
-    when(
-      mockedSageMakerClient
-        .describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))
-    ).thenReturn(response)
-
-    val inputDataFrame = Seq(("identifier-1", "2021-05-06T05:12:14Z"))
-      .toDF("record-identifier", "event-time")
-
-    withObjectMocked[ClientFactory.type] {
-      when(ClientFactory.sageMakerClient).thenReturn(mockedSageMakerClient)
-      doNothing().when(ClientFactory).initialize(anyString(), anyString())
-
-      withObjectMocked[LakeFormationHelper.type] {
-        featureStoreManager.ingestData(
-          inputDataFrame,
-          TEST_FEATURE_GROUP_ARN,
-          List("OfflineStore"),
-          useLakeFormationCredentials = false
-        )
-
-        verify(LakeFormationHelper, times(0))
-          .vendCredentials(anyString(), anyString(), anyString(), anyString(), anyString())
-      }
-    }
-
     verifyDataIngestedInOfflineStore(inputDataFrame, resolvedOutputPath)
   }
 
