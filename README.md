@@ -95,9 +95,9 @@ import com.amazonaws.services.sagemaker.featurestore.sparksdk.FeatureStoreManage
 
 val featureGroupArn = <your-feature-group-arn>
 val featureStoreManager = new FeatureStoreManager()
-featureStoreManager.ingestData(dataFrame, featureGroupArn, directOfflineStore = true)
+featureStoreManager.ingestData(dataFrame, featureGroupArn, targetStores = List("OfflineStore"))
 ```
-If `directOfflineStore` is specified to true, the spark library will ingest data directly to OfflineStore without using FeatureStoreRuntime API which is going to cut the cost on FeatureStore WCU, the default value for this flag is false.
+If `targetStores` is specified to `List("OfflineStore")`, the spark library will ingest data directly to OfflineStore without using FeatureStoreRuntime API which is going to cut the cost on FeatureStore WCU, the default value for this parameter is null (which ingests to both online and offline stores).
 
 To load feature definitions:
 
@@ -116,9 +116,9 @@ from feature_store_pyspark.FeatureStoreManager import FeatureStoreManager
 
 feature_group_arn = <your-feature-group-arn>
 feature_store_manager = FeatureStoreManager()
-feature_store_manager.ingest_data(input_data_frame=user_data_frame, feature_group_arn=feature_group_arn, direct_offline_store=True)
+feature_store_manager.ingest_data(input_data_frame=user_data_frame, feature_group_arn=feature_group_arn, target_stores=["OfflineStore"])
 ```
-If `direct_offline_store` is specified to true, the spark library will ingest data directly to OfflineStore without using FeatureStoreRuntime API which is going to cut the cost on FeatureStore WCU, the default value for this flag is false.
+If `target_stores` is specified to `["OfflineStore"]`, the spark library will ingest data directly to OfflineStore without using FeatureStoreRuntime API which is going to cut the cost on FeatureStore WCU, the default value for this parameter is None (which ingests to both online and offline stores).
 
 To load feature definitions:
 
@@ -145,7 +145,7 @@ val featureStoreManager = new FeatureStoreManager()
 featureStoreManager.ingestData(
   dataFrame,
   featureGroupArn,
-  directOfflineStore = true,
+  targetStores = List("OfflineStore"),
   useLakeFormationCredentials = true
 )
 ```
@@ -157,7 +157,7 @@ feature_store_manager = FeatureStoreManager()
 feature_store_manager.ingest_data(
     input_data_frame=df,
     feature_group_arn=feature_group_arn,
-    direct_offline_store=True,
+    target_stores=["OfflineStore"],
     use_lake_formation_credentials=True
 )
 ```
