@@ -84,6 +84,28 @@ object SparkSessionInitializer {
     }
   }
 
+  /** Configure bucket-scoped S3A temporary credentials from Lake Formation.
+   *
+   *  Sets the hadoop configuration so that S3A uses the vended temporary credentials for the bucket extracted from the
+   *  given S3 URI.
+   */
+  private def configureS3aCredentials(
+      sparkSession: SparkSession,
+      resolvedOutputS3Uri: String,
+      creds: LakeFormationCredentials
+  ): Unit = {
+    require(resolvedOutputS3Uri != null, "resolvedOutputS3Uri is required when lfCredentials are provided")
+    val bucket = new java.net.URI(resolvedOutputS3Uri).getHost
+    val conf   = sparkSession.sparkContext.hadoopConfiguration
+    conf.set(
+      s"fs.s3a.bucket.$bucket.aws.credentials.provider",
+      "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider"
+    )
+    conf.set(s"fs.s3a.bucket.$bucket.access.key", creds.accessKeyId)
+    conf.set(s"fs.s3a.bucket.$bucket.secret.key", creds.secretAccessKey)
+    conf.set(s"fs.s3a.bucket.$bucket.session.token", creds.sessionToken)
+  }
+
   /** Initialize the spark session for offline store
    *
    *  @param sparkSession
@@ -109,16 +131,7 @@ object SparkSessionInitializer {
 
     lfCredentials match {
       case Some(creds) =>
-        require(resolvedOutputS3Uri != null, "resolvedOutputS3Uri is required when lfCredentials are provided")
-        val bucket = new java.net.URI(resolvedOutputS3Uri).getHost
-        sparkSession.sparkContext.hadoopConfiguration
-          .set(
-            s"fs.s3a.bucket.$bucket.aws.credentials.provider",
-            "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider"
-          )
-        sparkSession.sparkContext.hadoopConfiguration.set(s"fs.s3a.bucket.$bucket.access.key", creds.accessKeyId)
-        sparkSession.sparkContext.hadoopConfiguration.set(s"fs.s3a.bucket.$bucket.secret.key", creds.secretAccessKey)
-        sparkSession.sparkContext.hadoopConfiguration.set(s"fs.s3a.bucket.$bucket.session.token", creds.sessionToken)
+        configureS3aCredentials(sparkSession, resolvedOutputS3Uri, creds)
       case None =>
         val local_credentials_provider = List(
           "com.amazonaws.auth.ContainerCredentialsProvider",
@@ -198,16 +211,7 @@ object SparkSessionInitializer {
 
     lfCredentials match {
       case Some(creds) =>
-        require(resolvedOutputS3Uri != null, "resolvedOutputS3Uri is required when lfCredentials are provided")
-        val bucket = new java.net.URI(resolvedOutputS3Uri).getHost
-        sparkSession.sparkContext.hadoopConfiguration
-          .set(
-            s"fs.s3a.bucket.$bucket.aws.credentials.provider",
-            "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider"
-          )
-        sparkSession.sparkContext.hadoopConfiguration.set(s"fs.s3a.bucket.$bucket.access.key", creds.accessKeyId)
-        sparkSession.sparkContext.hadoopConfiguration.set(s"fs.s3a.bucket.$bucket.secret.key", creds.secretAccessKey)
-        sparkSession.sparkContext.hadoopConfiguration.set(s"fs.s3a.bucket.$bucket.session.token", creds.sessionToken)
+        configureS3aCredentials(sparkSession, resolvedOutputS3Uri, creds)
       case None =>
         if (assumeRoleArn != null) {
           sparkSession.conf.set(f"spark.sql.catalog.$dataCatalogName.client.assume-role.arn", assumeRoleArn)
