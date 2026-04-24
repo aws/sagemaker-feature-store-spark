@@ -7,14 +7,6 @@ import org.testng.annotations.Test
 
 import java.time.Instant
 
-/** Branch coverage for [[SparkSessionInitializer]]'s LF credential wiring and magic-committer runtime detection.
- *
- *  Lives in the base test source set so all Spark builds exercise these paths. The three branches of
- *  `configureMagicCommitter` are exercised directly via the injectable class-presence predicate; the LF branches of
- *  `initializeSparkSessionFor{OfflineStore,IcebergTable}` are exercised by calling them with `Some(creds)` and
- *  tolerating the downstream magic-committer outcome (success on 3.5+, IllegalStateException on 3.1-3.4 where neither
- *  committer impl is on the classpath).
- */
 class SparkSessionInitializerLakeFormationTest extends TestNGSuite {
 
   private final val sparkSession: SparkSession = SparkSession

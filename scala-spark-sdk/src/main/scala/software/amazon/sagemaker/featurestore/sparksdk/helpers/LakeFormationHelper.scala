@@ -16,9 +16,9 @@
 
 package software.amazon.sagemaker.featurestore.sparksdk.helpers
 
+import org.apache.spark.sql.SparkSession
 import org.slf4j.LoggerFactory
 import software.amazon.awssdk.services.lakeformation.model.{GetTemporaryGlueTableCredentialsRequest, Permission}
-
 import scala.util.{Failure, Success, Try}
 
 object LakeFormationHelper {
@@ -94,6 +94,29 @@ object LakeFormationHelper {
       table: String
   ): String = {
     s"arn:$partition:glue:$region:$accountId:table/$database/$table"
+  }
+
+  /** Seed the LF-registered prefix with a tiny marker object using the Hadoop FileSystem that was just configured with
+   *  LF-vended creds. This ensures the subsequent S3A mkdirs probe during committer setupJob finds a non-empty LIST and
+   *  skips the HEAD on the prefix-as-object that LF denies with 403. Best-effort: failures are logged and ignored.
+   */
+  def seedLfPrefix(sparkSession: SparkSession, resolvedOutputS3Uri: String): Unit = {
+    import org.apache.hadoop.fs.{FileSystem, Path}
+    import java.net.URI
+
+    val s3aUri = resolvedOutputS3Uri.replaceFirst("^s3:", "s3a:").stripSuffix("/")
+    try {
+      val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+      val fs         = FileSystem.get(new URI(s3aUri), hadoopConf)
+      val markerPath = new Path(s"$s3aUri/_feature_store_spark_init")
+      val out        = fs.create(markerPath, /* overwrite */ true)
+      try out.close()
+      catch { case _: Throwable => () }
+      logger.info(s"Seeded LF-registered prefix with marker $markerPath")
+    } catch {
+      case t: Throwable =>
+        logger.warn(s"Failed to seed LF-registered prefix $s3aUri: ${t.getMessage}")
+    }
   }
 
   private def buildPartitionFromRegion(region: String): String = {

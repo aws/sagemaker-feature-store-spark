@@ -10,6 +10,9 @@ from botocore.exceptions import ClientError
 
 DIST_DIR = "../dist"
 BATCH_INGESTION_TEST_FILE_NAME = "BatchIngestionTest.py"
+LAKE_FORMATION_HIVE_TEST_FILE_NAME = "LakeFormationHiveIngestionTest.py"
+LAKE_FORMATION_ICEBERG_TEST_FILE_NAME = "LakeFormationIcebergIngestionTest.py"
+LAKE_FORMATION_COMMON_FILE_NAME = "_lf_test_common.py"
 EMR_TEST_CLUSTER_NAME = "SparkTestEmrCluster"
 
 
@@ -28,13 +31,19 @@ elif len(tars) > 1:
 
 pyspark_tar_name = tars[0]
 pyspark_tar_path = os.path.join(DIST_DIR, pyspark_tar_name)
+# Preserve the full original filename so PEP 427 wheel naming
+# (name-version-python-abi-platform.whl) is retained; stripping it breaks pip.
+pyspark_artifact_s3_name = pyspark_tar_name
 current_time_stamp = int(time.time())
 test_temp_dir = f"spark-test-temp-{current_time_stamp}"
 
 # First, submit all dependent integration test files to test S3 bucket
 print(f"Uploading the spark library test files to {TEST_S3_BUCKET}.")
-s3_client.upload_file(pyspark_tar_path, TEST_S3_BUCKET, f"{test_temp_dir}/sagemaker_feature_store_pyspark.tar.gz")
+s3_client.upload_file(pyspark_tar_path, TEST_S3_BUCKET, f"{test_temp_dir}/{pyspark_artifact_s3_name}")
 s3_client.upload_file(BATCH_INGESTION_TEST_FILE_NAME, TEST_S3_BUCKET, f"{test_temp_dir}/{BATCH_INGESTION_TEST_FILE_NAME}")
+s3_client.upload_file(LAKE_FORMATION_COMMON_FILE_NAME, TEST_S3_BUCKET, f"{test_temp_dir}/{LAKE_FORMATION_COMMON_FILE_NAME}")
+s3_client.upload_file(LAKE_FORMATION_HIVE_TEST_FILE_NAME, TEST_S3_BUCKET, f"{test_temp_dir}/{LAKE_FORMATION_HIVE_TEST_FILE_NAME}")
+s3_client.upload_file(LAKE_FORMATION_ICEBERG_TEST_FILE_NAME, TEST_S3_BUCKET, f"{test_temp_dir}/{LAKE_FORMATION_ICEBERG_TEST_FILE_NAME}")
 print("Upload finished.")
 
 # Fetch the latest EMR cluster's Id that is still working
@@ -47,6 +56,8 @@ if not clusters:
     sys.exit(f"No active EMR cluster found with name: {EMR_TEST_CLUSTER_NAME}")
 cluster_id = clusters[0]["Id"]
 hadoop_test_temp_dir = f'/home/hadoop/{test_temp_dir}'
+venv_python = f'{hadoop_test_temp_dir}/venv/bin/python3'
+venv_pip = f'{hadoop_test_temp_dir}/venv/bin/pip'
 
 # Add workflow steps to EMR
 step_ids = emr_client.add_job_flow_steps(
@@ -60,13 +71,17 @@ step_ids = emr_client.add_job_flow_steps(
                 'Args': [
                     "bash",
                     "-c",
+                    # All deps go into a throwaway venv under the test temp dir so
+                    # nothing persists on the cluster's root volume between runs.
+                    f'set -e;'
                     f'mkdir {hadoop_test_temp_dir};'
                     f'aws s3 cp --recursive s3://{TEST_S3_BUCKET}/{test_temp_dir} {hadoop_test_temp_dir};'
                     f'cd {hadoop_test_temp_dir};'
-                    f'sudo pip3 install --upgrade boto3 numpy;'
-                    f'sudo pip3 uninstall -y sagemaker-feature-store-pyspark;'
-                    f'sudo pip3 uninstall -y sagemaker-feature-store-pyspark-3.1;'
-                    f'sudo pip3 install sagemaker_feature_store_pyspark.tar.gz'
+                    f'python3 -m venv --system-site-packages venv;'
+                    f'{venv_pip} install --no-cache-dir --upgrade pip;'
+                    f'{venv_pip} install --no-cache-dir --prefer-binary '
+                    f'  boto3 numpy "sagemaker-mlops>=1.8.0" "sagemaker-core>=2.8.0" "pyiceberg[glue,pyarrow,pandas]>=0.9.0";'
+                    f'{venv_pip} install --no-cache-dir {pyspark_artifact_s3_name}'
                 ]
             }
         },
@@ -79,7 +94,33 @@ step_ids = emr_client.add_job_flow_steps(
                     "bash",
                     "-c",
                     f'export PYTHONPATH="/usr/lib/spark/python:/usr/lib/spark/python/lib/py4j-src.zip:$PYTHONPATH";'
-                    f'python3 {hadoop_test_temp_dir}/{BATCH_INGESTION_TEST_FILE_NAME}'
+                    f'{venv_python} {hadoop_test_temp_dir}/{BATCH_INGESTION_TEST_FILE_NAME}'
+                ]
+            }
+        },
+        {
+            'Name': 'Run Lake Formation Hive Integration Test',
+            'ActionOnFailure': 'CONTINUE',
+            'HadoopJarStep': {
+                'Jar': 'command-runner.jar',
+                'Args': [
+                    "bash",
+                    "-c",
+                    f'export PYTHONPATH="/usr/lib/spark/python:/usr/lib/spark/python/lib/py4j-src.zip:$PYTHONPATH";'
+                    f'{venv_python} {hadoop_test_temp_dir}/{LAKE_FORMATION_HIVE_TEST_FILE_NAME}'
+                ]
+            }
+        },
+        {
+            'Name': 'Run Lake Formation Iceberg Integration Test',
+            'ActionOnFailure': 'CONTINUE',
+            'HadoopJarStep': {
+                'Jar': 'command-runner.jar',
+                'Args': [
+                    "bash",
+                    "-c",
+                    f'export PYTHONPATH="/usr/lib/spark/python:/usr/lib/spark/python/lib/py4j-src.zip:$PYTHONPATH";'
+                    f'{venv_python} {hadoop_test_temp_dir}/{LAKE_FORMATION_ICEBERG_TEST_FILE_NAME}'
                 ]
             }
         },
@@ -91,9 +132,8 @@ step_ids = emr_client.add_job_flow_steps(
                 'Args': [
                     "bash",
                     "-c",
-                    f'pip3 uninstall -y sagemaker-feature-store-pyspark;'
-                    f'pip3 uninstall -y sagemaker-feature-store-pyspark-3.1;'
-                    f'rm -r {hadoop_test_temp_dir}'
+                    # Deleting the temp dir nukes the venv and all test artifacts.
+                    f'rm -rf {hadoop_test_temp_dir}'
                 ]
             }
         }

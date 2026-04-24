@@ -348,6 +348,15 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         refreshedLfCredentials
       )
 
+      // LF-vended creds scope S3 access to objects UNDER the registered prefix. The S3A
+      // committer's setupJob mkdirs probes the prefix: LIST first (empty on a fresh feature
+      // group), then HEAD on the prefix-as-object (LF denies => 403). Seed a marker object so
+      // the LIST is non-empty and the HEAD is skipped. No-op when LF is not in use.
+      refreshedLfCredentials.foreach { _ =>
+        val resolvedOutputS3Uri = describeResponse.offlineStoreConfig().s3StorageConfig().resolvedOutputS3Uri()
+        LakeFormationHelper.seedLfPrefix(dataFrame.sparkSession, resolvedOutputS3Uri)
+      }
+
       val offlineDataFrame = tempDataFrame
         .withColumn("temp_event_time_col", col(eventTimeFeatureName).cast("Timestamp"))
         .withColumn("year", date_format(col("temp_event_time_col"), "yyyy"))

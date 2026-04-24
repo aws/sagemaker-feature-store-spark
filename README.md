@@ -166,9 +166,34 @@ feature_store_manager.ingest_data(
 
 1. The offline store S3 location must be [registered with Lake Formation](https://docs.aws.amazon.com/lake-formation/latest/dg/register-data-lake.html).
    You can use the [SageMaker Python SDK](https://github.com/aws/sagemaker-python-sdk) to enable Lake Formation governance of a Feature Group's offline store.
-2. The IAM role running the Spark job must have `lakeformation:GetDataAccess` permission.
-3. The Lake Formation table must have `SELECT`, `INSERT`, and `DESCRIBE` permissions granted to the caller.
-4. An S3A magic committer implementation must be available. The connector enables the S3A magic committer to let Parquet writes stay within the Lake Formation-scoped S3 prefix.
+2. The IAM role running the Spark job (the "ingestion role") must have:
+   - `lakeformation:GetDataAccess` and `lakeformation:GetTemporaryGlueTableCredentials`.
+   - `glue:GetTable`, `glue:GetDatabase`, and `glue:GetPartitions` on the feature group's Glue catalog.
+   - `sagemaker:DescribeFeatureGroup` on the feature group.
+3. The Lake Formation table must have `SELECT`, `INSERT`, `DELETE`, and `DESCRIBE` granted on the **Table** resource to the ingestion role. `GetTemporaryGlueTableCredentials` validates permissions at the Table level; a column-only `SELECT` grant is not sufficient and returns `Insufficient Lake Formation permission(s): SUPER privileges required on the table`.
+4. The Lake Formation account-level settings must allow third-party data access (required so Lake Formation will vend temporary credentials to the Spark connector):
+
+   ```bash
+   aws lakeformation put-data-lake-settings \
+     --region <region> \
+     --data-lake-settings '{
+       "DataLakeAdmins": [...],
+       "AllowExternalDataFiltering": true,
+       "AllowFullTableExternalDataAccess": true,
+       "ExternalDataFilteringAllowList": [
+         {"DataLakePrincipalIdentifier": "<account-id>"}
+       ],
+       "CreateDatabaseDefaultPermissions": [],
+       "CreateTableDefaultPermissions": []
+     }'
+   ```
+
+   - `AllowExternalDataFiltering: true` permits Amazon EMR (and other third-party engines) to access data in S3 locations registered with Lake Formation.
+   - `AllowFullTableExternalDataAccess: true` permits third-party engines like Spark to receive data access credentials without session tags, which `GetTemporaryGlueTableCredentials` requires. Without it, credential vending fails with `Not authorized to call GetTemporaryCredentialsForTableV2`.
+   - `ExternalDataFilteringAllowList` must contain the account(s) whose principals will call the connector.
+
+   See the AWS docs on [external data filtering](https://docs.aws.amazon.com/lake-formation/latest/dg/third-party-services.html) for details.
+5. An S3A magic committer implementation must be available. The connector enables the S3A magic committer to let Parquet writes stay within the Lake Formation-scoped S3 prefix.
 
    - On **EMR 6.15+/7.x**: no action required. EMR ships its proprietary `SQLEmrOptimizedCommitProtocol` which the connector auto-detects and uses.
    - On **AWS Glue**, **SageMaker Notebook**, **standalone PySpark**, or any other non-EMR runtime: add the open-source `spark-hadoop-cloud` module at submit time, for example:
@@ -307,7 +332,13 @@ We are using `tox` for test purposes. The test matrix covers Python 3.8–3.12 a
 
 #### Integration Test
 
-The test execution script and test itself are included in `pyspark-sdk/integration_test`, to run the test:
+The test execution script and tests are included in `pyspark-sdk/integration_test`. The runner submits each test as a separate EMR step:
+
+- `BatchIngestionTest.py` — end-to-end online/offline ingestion against Glue and Iceberg tables.
+- `LakeFormationHiveIngestionTest.py` — end-to-end ingestion with `use_lake_formation_credentials=True` against a Glue (Hive-partitioned) offline store.
+- `LakeFormationIcebergIngestionTest.py` — end-to-end ingestion with `use_lake_formation_credentials=True` against an Iceberg offline store.
+
+To run:
 
 1. Fetch the credential from our spark test account first.
 2. Run the test execution script `run-spark-integration-test`
