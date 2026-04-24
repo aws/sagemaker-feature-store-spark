@@ -25,9 +25,9 @@ object LakeFormationHelper {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  // Credential duration is currently hardcoded. For long-running Spark jobs exceeding 1 hour,
+  // Credential duration is currently hardcoded. For long-running Spark jobs exceeding 2 hours,
   // credentials will be refreshed automatically via refreshIfNeeded before they expire.
-  private val CREDENTIAL_DURATION_SECONDS = 3600
+  private val CREDENTIAL_DURATION_SECONDS = 7200
   private val REFRESH_BUFFER_SECONDS      = 300
 
   def vendCredentials(
@@ -36,7 +36,7 @@ object LakeFormationHelper {
       partition: String,
       database: String,
       table: String
-  ): Option[LakeFormationCredentials] = {
+  ): LakeFormationCredentials = {
     val tableArn = buildGlueTableArn(partition, region, accountId, database, table)
     logger.debug(s"Vending LF credentials for table ARN: $tableArn")
     Try {
@@ -62,16 +62,19 @@ object LakeFormationHelper {
     } match {
       case Success(creds) =>
         logger.debug(s"Vended LF credentials for $database.$table, expires at ${creds.expiration}")
-        Some(creds)
+        creds
       case Failure(ex) =>
-        logger.warn(
-          s"Failed to vend LF credentials for $database.$table, falling back to default credentials: ${ex.getMessage}"
+        throw new RuntimeException(
+          s"Failed to vend Lake Formation credentials for $database.$table. " +
+            s"The caller explicitly requested Lake Formation credential vending but GetTemporaryGlueTableCredentials failed. " +
+            s"Check that the IAM role has lakeformation:GetDataAccess and the Lake Formation table grants are configured correctly. " +
+            s"See the connector's README troubleshooting section for details.",
+          ex
         )
-        None
     }
   }
 
-  def refreshIfNeeded(credentials: LakeFormationCredentials): Option[LakeFormationCredentials] = {
+  def refreshIfNeeded(credentials: LakeFormationCredentials): LakeFormationCredentials = {
     if (credentials.isExpiringSoon(REFRESH_BUFFER_SECONDS)) {
       logger.debug(s"LF credentials expiring soon, refreshing for ${credentials.database}.${credentials.table}")
       vendCredentials(
@@ -82,7 +85,7 @@ object LakeFormationHelper {
         credentials.table
       )
     } else {
-      Some(credentials)
+      credentials
     }
   }
 
@@ -119,9 +122,4 @@ object LakeFormationHelper {
     }
   }
 
-  private def buildPartitionFromRegion(region: String): String = {
-    if (region.startsWith("cn-")) "aws-cn"
-    else if (region.startsWith("us-gov-")) "aws-us-gov"
-    else "aws"
-  }
 }

@@ -48,6 +48,7 @@ import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
   ClientFactory,
   DataFrameRepartitioner,
   FeatureGroupArnResolver,
+  LakeFormationCredentials,
   LakeFormationHelper,
   MinSparkVersionGate,
   SparkSessionInitializer
@@ -291,27 +292,28 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     val tableFormat         = describeResponse.offlineStoreConfig().tableFormat()
     val destinationFilePath = generateDestinationFilePath(describeResponse)
 
-    val lfCredentials = if (useLakeFormationCredentials) {
+    val lfCredentials: Option[LakeFormationCredentials] = if (useLakeFormationCredentials) {
       // Build-time gate: on Spark <3.5 builds requireSparkVersion(3, 5) throws; on Spark 3.5+ it is a no-op.
       MinSparkVersionGate.requireSparkVersion(3, 5)
       val dataCatalogConfig = describeResponse.offlineStoreConfig().dataCatalogConfig()
       logger.info(s"dataCatalogConfig=${if (dataCatalogConfig != null)
         s"database=${dataCatalogConfig.database()}, table=${dataCatalogConfig.tableName()}"
       else "null"}")
-      Option(dataCatalogConfig).flatMap { dcc =>
-        val database  = dcc.database().toLowerCase()
-        val tableName = dcc.tableName().toLowerCase()
-        val partition = new FeatureGroupArnResolver(describeResponse.featureGroupArn()).resolvePartition()
-        LakeFormationHelper.vendCredentials(region, accountId, partition, database, tableName)
+      if (dataCatalogConfig == null) {
+        throw new RuntimeException(
+          "Lake Formation credential vending requires a Data Catalog configuration on the feature group's offline store."
+        )
       }
+      val database  = dataCatalogConfig.database().toLowerCase()
+      val tableName = dataCatalogConfig.tableName().toLowerCase()
+      val partition = new FeatureGroupArnResolver(describeResponse.featureGroupArn()).resolvePartition()
+      Some(LakeFormationHelper.vendCredentials(region, accountId, partition, database, tableName))
     } else {
       logger.info("LakeFormation credential vending disabled by caller")
       None
     }
 
-    val refreshedLfCredentials = lfCredentials.flatMap(LakeFormationHelper.refreshIfNeeded)
-
-    logger.info(s"refreshedLfCredentials=${if (refreshedLfCredentials.isDefined) "present" else "None"}")
+    val resolvedOutputS3Uri = describeResponse.offlineStoreConfig().s3StorageConfig().resolvedOutputS3Uri()
 
     val tempDataFrame = dataFrame
       .withColumn("api_invocation_time", current_timestamp())
@@ -319,10 +321,15 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       .withColumn("is_deleted", lit(false))
 
     if (isIcebergTableEnabled(describeResponse)) {
-      val resolvedOutputS3Uri = describeResponse.offlineStoreConfig().s3StorageConfig().resolvedOutputS3Uri()
-      val dataCatalogName     = describeResponse.offlineStoreConfig().dataCatalogConfig().catalog().toLowerCase()
-      val dataBaseName        = describeResponse.offlineStoreConfig().dataCatalogConfig().database().toLowerCase()
-      val tableName           = describeResponse.offlineStoreConfig().dataCatalogConfig().tableName().toLowerCase()
+      val dataCatalogName = describeResponse.offlineStoreConfig().dataCatalogConfig().catalog().toLowerCase()
+      val dataBaseName    = describeResponse.offlineStoreConfig().dataCatalogConfig().database().toLowerCase()
+      val tableName       = describeResponse.offlineStoreConfig().dataCatalogConfig().tableName().toLowerCase()
+
+      // Refresh LF credentials just before the write to minimize the window between vending and
+      // the actual S3 write. Note: for very large DataFrames the 2-hour credential window may
+      // still expire mid-write. Users with long-running ingestion jobs should partition their
+      // data into smaller batches.
+      val refreshedLfCredentials = lfCredentials.map(LakeFormationHelper.refreshIfNeeded)
 
       SparkSessionInitializer.initializeSparkSessionForIcebergTable(
         dataFrame.sparkSession,
@@ -340,11 +347,18 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         .option("compression", "none")
         .append()
     } else if (isGlueTableEnabled(describeResponse) || tableFormat == null) {
+      // Refresh LF credentials just before the write to minimize the window between vending and
+      // the actual S3 write. Note: for very large DataFrames the 2-hour credential window may
+      // still expire mid-write. Users with long-running ingestion jobs should partition their
+      // data into smaller batches.
+      val refreshedLfCredentials = lfCredentials.map(LakeFormationHelper.refreshIfNeeded)
+
       SparkSessionInitializer.initializeSparkSessionForOfflineStore(
         dataFrame.sparkSession,
         offlineStoreEncryptionKeyId,
         assumeRoleArn,
         region,
+        resolvedOutputS3Uri,
         refreshedLfCredentials
       )
 
@@ -353,7 +367,6 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       // group), then HEAD on the prefix-as-object (LF denies => 403). Seed a marker object so
       // the LIST is non-empty and the HEAD is skipped. No-op when LF is not in use.
       refreshedLfCredentials.foreach { _ =>
-        val resolvedOutputS3Uri = describeResponse.offlineStoreConfig().s3StorageConfig().resolvedOutputS3Uri()
         LakeFormationHelper.seedLfPrefix(dataFrame.sparkSession, resolvedOutputS3Uri)
       }
 

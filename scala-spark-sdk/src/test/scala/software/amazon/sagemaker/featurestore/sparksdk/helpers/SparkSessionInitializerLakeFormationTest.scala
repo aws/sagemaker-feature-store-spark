@@ -102,17 +102,18 @@ class SparkSessionInitializerLakeFormationTest extends TestNGSuite {
         "kms-key",
         null,
         "us-west-2",
+        "s3://my-bucket/prefix",
         Some(creds)
       )
     }
     val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
     assertEquals(
-      hadoopConf.get("fs.s3a.aws.credentials.provider"),
+      hadoopConf.get("fs.s3a.bucket.my-bucket.aws.credentials.provider"),
       "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider"
     )
-    assertEquals(hadoopConf.get("fs.s3a.access.key"), "ak-off")
-    assertEquals(hadoopConf.get("fs.s3a.secret.key"), "sk-off")
-    assertEquals(hadoopConf.get("fs.s3a.session.token"), "st-off")
+    assertEquals(hadoopConf.get("fs.s3a.bucket.my-bucket.access.key"), "ak-off")
+    assertEquals(hadoopConf.get("fs.s3a.bucket.my-bucket.secret.key"), "sk-off")
+    assertEquals(hadoopConf.get("fs.s3a.bucket.my-bucket.session.token"), "st-off")
   }
 
   @Test
@@ -131,11 +132,11 @@ class SparkSessionInitializerLakeFormationTest extends TestNGSuite {
     }
     val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
     assertEquals(
-      hadoopConf.get("fs.s3a.aws.credentials.provider"),
+      hadoopConf.get("fs.s3a.bucket.bucket.aws.credentials.provider"),
       "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider"
     )
-    assertEquals(hadoopConf.get("fs.s3a.access.key"), "ak-ice")
-    assertEquals(hadoopConf.get("fs.s3a.secret.key"), "sk-ice")
-    assertEquals(hadoopConf.get("fs.s3a.session.token"), "st-ice")
+    assertEquals(hadoopConf.get("fs.s3a.bucket.bucket.access.key"), "ak-ice")
+    assertEquals(hadoopConf.get("fs.s3a.bucket.bucket.secret.key"), "sk-ice")
+    assertEquals(hadoopConf.get("fs.s3a.bucket.bucket.session.token"), "st-ice")
   }
 }

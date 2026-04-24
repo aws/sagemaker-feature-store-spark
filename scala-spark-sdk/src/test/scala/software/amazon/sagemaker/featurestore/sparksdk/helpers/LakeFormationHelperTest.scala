@@ -4,7 +4,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito
 import org.mockito.stubbing.Stubber
 import org.scalatestplus.testng.TestNGSuite
-import org.testng.Assert.{assertEquals, assertFalse, assertTrue}
+import org.testng.Assert.{assertEquals, assertTrue}
 import org.testng.annotations.{BeforeMethod, Test}
 import software.amazon.awssdk.services.lakeformation.LakeFormationClient
 import software.amazon.awssdk.services.lakeformation.model.GetTemporaryGlueTableCredentialsRequest
@@ -45,11 +45,10 @@ class LakeFormationHelperTest extends TestNGSuite {
       .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
 
     val result = LakeFormationHelper.vendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
-    assertTrue(result.isDefined)
-    assertEquals(result.get.region, "us-west-2")
-    assertEquals(result.get.accountId, "123456789012")
-    assertEquals(result.get.database, "db")
-    assertEquals(result.get.table, "tbl")
+    assertEquals(result.region, "us-west-2")
+    assertEquals(result.accountId, "123456789012")
+    assertEquals(result.database, "db")
+    assertEquals(result.table, "tbl")
   }
 
   @Test
@@ -59,8 +58,14 @@ class LakeFormationHelperTest extends TestNGSuite {
       .when(mockLfClient)
       .getTemporaryGlueTableCredentials(any(classOf[GetTemporaryGlueTableCredentialsRequest]))
 
-    val result = LakeFormationHelper.vendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
-    assertFalse(result.isDefined)
+    try {
+      LakeFormationHelper.vendCredentials("us-west-2", "123456789012", "aws", "db", "tbl")
+      throw new AssertionError("Expected RuntimeException")
+    } catch {
+      case e: RuntimeException =>
+        assertTrue(e.getMessage.contains("Failed to vend Lake Formation credentials"))
+        assertTrue(e.getCause.getMessage.contains("LF error"))
+    }
   }
 
   @Test
@@ -92,8 +97,7 @@ class LakeFormationHelperTest extends TestNGSuite {
     )
 
     val result = LakeFormationHelper.refreshIfNeeded(expiringSoonCreds)
-    assertTrue(result.isDefined)
-    assertEquals(result.get.accessKeyId, "new-ak")
+    assertEquals(result.accessKeyId, "new-ak")
   }
 
   @Test
@@ -111,8 +115,7 @@ class LakeFormationHelperTest extends TestNGSuite {
     )
 
     val result = LakeFormationHelper.refreshIfNeeded(creds)
-    assertTrue(result.isDefined)
-    assertEquals(result.get.accessKeyId, "ak")
+    assertEquals(result.accessKeyId, "ak")
   }
 
   @Test
@@ -144,8 +147,7 @@ class LakeFormationHelperTest extends TestNGSuite {
     )
 
     val result = LakeFormationHelper.refreshIfNeeded(expiringSoonCreds)
-    assertTrue(result.isDefined)
-    assertEquals(result.get.accessKeyId, "cn-ak")
+    assertEquals(result.accessKeyId, "cn-ak")
   }
 
   @Test
@@ -177,8 +179,7 @@ class LakeFormationHelperTest extends TestNGSuite {
     )
 
     val result = LakeFormationHelper.refreshIfNeeded(expiringSoonCreds)
-    assertTrue(result.isDefined)
-    assertEquals(result.get.accessKeyId, "gov-ak")
+    assertEquals(result.accessKeyId, "gov-ak")
   }
 
   @Test
