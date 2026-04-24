@@ -25,9 +25,9 @@ object LakeFormationHelper {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  // Credential duration is currently hardcoded. For long-running Spark jobs exceeding 2 hours,
+  // Credential duration is currently hardcoded. For long-running Spark jobs exceeding 1 hour,
   // credentials will be refreshed automatically via refreshIfNeeded before they expire.
-  private val CREDENTIAL_DURATION_SECONDS = 7200
+  private val CREDENTIAL_DURATION_SECONDS = 3600
   private val REFRESH_BUFFER_SECONDS      = 300
 
   def vendCredentials(

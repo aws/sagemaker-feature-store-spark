@@ -326,7 +326,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       val tableName       = describeResponse.offlineStoreConfig().dataCatalogConfig().tableName().toLowerCase()
 
       // Refresh LF credentials just before the write to minimize the window between vending and
-      // the actual S3 write. Note: for very large DataFrames the 2-hour credential window may
+      // the actual S3 write. Note: for very large DataFrames the 1-hour credential window may
       // still expire mid-write. Users with long-running ingestion jobs should partition their
       // data into smaller batches.
       val refreshedLfCredentials = lfCredentials.map(LakeFormationHelper.refreshIfNeeded)
@@ -348,7 +348,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         .append()
     } else if (isGlueTableEnabled(describeResponse) || tableFormat == null) {
       // Refresh LF credentials just before the write to minimize the window between vending and
-      // the actual S3 write. Note: for very large DataFrames the 2-hour credential window may
+      // the actual S3 write. Note: for very large DataFrames the 1-hour credential window may
       // still expire mid-write. Users with long-running ingestion jobs should partition their
       // data into smaller batches.
       val refreshedLfCredentials = lfCredentials.map(LakeFormationHelper.refreshIfNeeded)

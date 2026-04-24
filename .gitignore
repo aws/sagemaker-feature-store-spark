@@ -1,5 +1,4 @@
 .DS_Store
-**/__pycache__
 pyspark-sdk/.coverage
 pyspark-sdk/.tox/
 scala-spark-sdk/.bsp/
@@ -21,4 +20,3 @@ derby.log
 metastore_db
 pyspark-sdk/sagemaker_feature_store_pyspark*.egg-info
 assembly-output
-**/*.jar
