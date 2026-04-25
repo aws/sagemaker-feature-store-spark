@@ -170,7 +170,7 @@ feature_store_manager.ingest_data(
    - `lakeformation:GetDataAccess` and `lakeformation:GetTemporaryGlueTableCredentials`.
    - `glue:GetTable`, `glue:GetDatabase`, and `glue:GetPartitions` on the feature group's Glue catalog.
    - `sagemaker:DescribeFeatureGroup` on the feature group.
-3. The Lake Formation table must have `SELECT`, `INSERT`, `DELETE`, and `DESCRIBE` granted on the **Table** resource to the ingestion role. `GetTemporaryGlueTableCredentials` validates permissions at the Table level; a column-only `SELECT` grant is not sufficient and returns `Insufficient Lake Formation permission(s): SUPER privileges required on the table`.
+3. The Lake Formation table must have `SELECT`, `INSERT`, and `DESCRIBE` granted on the **Table** resource to the ingestion role. `GetTemporaryGlueTableCredentials` validates permissions at the Table level; a column-only `SELECT` grant is not sufficient and returns `Insufficient Lake Formation permission(s): SUPER privileges required on the table`.
 4. The Lake Formation account-level settings must allow third-party data access (required so Lake Formation will vend temporary credentials to the Spark connector):
 
    ```bash
