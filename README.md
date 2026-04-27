@@ -303,6 +303,14 @@ If credential vending fails, check the following:
        --region <region>
      ```
 
+### Known Limitations
+
+#### Credential Expiry on Large DataFrames
+
+Lake Formation temporary credentials have a TTL of approximately one hour. The connector refreshes credentials immediately before each write, but once a Spark write operation begins, the credentials are fixed for the duration of that write. If the write takes longer than the credential TTL, executors will fail with S3 `403 AccessDenied` errors.
+
+This can happen with very large DataFrames, small clusters, or skewed partition distributions. To avoid this, break large DataFrames into smaller batches and call `ingestData` / `ingest_data` separately for each batch. Each call vends fresh credentials, so keeping individual batches under ~20 minutes of write time provides a comfortable margin. Splitting by event time is recommended since it aligns with the offline store's partitioning scheme. This approach works for both Iceberg and Glue (Hive-partitioned) table formats.
+
 ## Development
 
 ### New Features

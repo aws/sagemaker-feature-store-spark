@@ -25,8 +25,10 @@ object LakeFormationHelper {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  // Credential duration is currently hardcoded. For long-running Spark jobs exceeding 1 hour,
-  // credentials will be refreshed automatically via refreshIfNeeded before they expire.
+  // Credential duration is currently hardcoded. refreshIfNeeded vends fresh credentials before
+  // each write, but once a Spark write begins the credentials are fixed for its duration. If a
+  // single write exceeds 1 hour (e.g. very large DataFrames), executors will fail with S3 403
+  // AccessDenied. Callers should batch large DataFrames into smaller writes to stay within the TTL.
   private val CREDENTIAL_DURATION_SECONDS = 3600
   private val REFRESH_BUFFER_SECONDS      = 300
 
