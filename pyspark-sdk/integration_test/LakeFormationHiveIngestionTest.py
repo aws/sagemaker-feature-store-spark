@@ -1,6 +1,6 @@
 """Lake Formation end-to-end ingestion test for Glue (Hive-partitioned) offline stores."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from _lf_test_common import (
     assert_ingested,
@@ -18,7 +18,7 @@ df = build_test_dataframe(spark)
 ingest_with_lf_credentials(fg_arn, df)
 
 # Glue tables use Hive-style partitioning: year=Y/month=M/day=D/hour=H/
-event_time_date = datetime.fromtimestamp(current_timestamp)
+event_time_date = datetime.fromtimestamp(current_timestamp, tz=timezone.utc)
 partitioned_s3_path = "/".join(
     [
         resolved_output_s3_uri,
