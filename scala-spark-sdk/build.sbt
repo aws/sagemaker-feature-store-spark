@@ -23,6 +23,15 @@ lazy val SageMakerFeatureStoreSpark = (project in file(".")).settings(
 val sparkVersion = System.getProperty("SPARK_VERSION", "3.3.4")
 val majorSparkVersion = sparkVersion.substring(0, sparkVersion.lastIndexOf("."))
 
+// Parse major.minor parts as integers for correct version comparison
+// (e.g. "3.10" must be greater than "3.5", which toDouble would break)
+val sparkVersionParts = majorSparkVersion.split("\\.").map(_.toInt)
+val sparkMajor = sparkVersionParts(0)
+val sparkMinor = sparkVersionParts(1)
+
+def sparkVersionAtLeast(major: Int, minor: Int): Boolean =
+  sparkMajor > major || (sparkMajor == major && sparkMinor >= minor)
+
 val awsSDKVersion = "2.18.32"
 val sparkVersionToHadoopVersionMap = Map(
   "3.1" -> "3.2.4",
@@ -34,7 +43,7 @@ val sparkVersionToHadoopVersionMap = Map(
 
 Compile / unmanagedSourceDirectories += {
   val baseDir = baseDirectory.value
-  if (majorSparkVersion.toDouble >= 3.5) {
+  if (sparkVersionAtLeast(3, 5)) {
     baseDir / "src" / "main" / "scala-spark-3.5"
   } else {
     baseDir / "src" / "main" / "scala-spark-3.1-3.4"
@@ -45,7 +54,7 @@ Compile / unmanagedSourceDirectories += {
 // only compile on Spark 3.5+.
 Test / unmanagedSourceDirectories += {
   val baseDir = baseDirectory.value
-  if (majorSparkVersion.toDouble >= 3.5) {
+  if (sparkVersionAtLeast(3, 5)) {
     baseDir / "src" / "test" / "scala-spark-3.5"
   } else {
     baseDir / "src" / "test" / "scala-spark-3.1-3.4"
@@ -102,7 +111,7 @@ libraryDependencies ++= Seq(
 // Lake Formation support is gated to Spark 3.5+. spark-hadoop-cloud provides the S3A magic
 // committer required by LF-credential-scoped writes; it is not needed on 3.1-3.4 where LF is absent.
 val lfDeps =
-  if (majorSparkVersion.toDouble >= 3.5)
+  if (sparkVersionAtLeast(3, 5))
     Seq("org.apache.spark" %% "spark-hadoop-cloud" % sparkVersion % Provided)
   else
     Seq.empty
