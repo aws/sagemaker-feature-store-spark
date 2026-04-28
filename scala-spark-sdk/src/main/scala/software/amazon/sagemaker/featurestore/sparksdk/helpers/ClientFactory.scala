@@ -56,10 +56,12 @@ object ClientFactory {
   def stsAssumeRoleCredentialsProvider: StsAssumeRoleCredentialsProvider = _stsAssumeRoleCredentialsProvider.orNull
   def skipInitialization: Boolean                                        = _skipInitialization
 
-  def lakeFormationClient: LakeFormationClient = _lakeFormationClient.getOrElse {
-    val client = getDefaultLakeFormationClient
-    _lakeFormationClient = Some(client)
-    client
+  def lakeFormationClient: LakeFormationClient = synchronized {
+    _lakeFormationClient.getOrElse {
+      val client = getDefaultLakeFormationClient
+      _lakeFormationClient = Some(client)
+      client
+    }
   }
 
   // Setters
