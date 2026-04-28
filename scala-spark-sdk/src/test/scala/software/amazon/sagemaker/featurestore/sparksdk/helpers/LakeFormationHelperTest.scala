@@ -10,6 +10,8 @@ import software.amazon.awssdk.services.lakeformation.LakeFormationClient
 import software.amazon.awssdk.services.lakeformation.model.GetTemporaryGlueTableCredentialsRequest
 import software.amazon.awssdk.services.lakeformation.model.GetTemporaryGlueTableCredentialsResponse
 
+import org.apache.spark.sql.SparkSession
+import java.nio.file.Files
 import java.time.Instant
 
 class LakeFormationHelperTest extends TestNGSuite {
@@ -20,6 +22,13 @@ class LakeFormationHelperTest extends TestNGSuite {
 
   // Disambiguate Mockito.doReturn overloads for Scala 2.12
   private def stubReturn(value: Any): Stubber = Mockito.doReturn(value, Seq.empty[Object]: _*)
+
+  private lazy val sparkSession: SparkSession = SparkSession
+    .builder()
+    .appName("LakeFormationHelperTest")
+    .master("local")
+    .config("spark.sql.catalogImplementation", "in-memory")
+    .getOrCreate()
 
   @BeforeMethod
   def setup(): Unit = {
@@ -198,5 +207,32 @@ class LakeFormationHelperTest extends TestNGSuite {
   def testBuildGlueTableArnGovPartition(): Unit = {
     val arn = LakeFormationHelper.buildGlueTableArn("aws-us-gov", "us-gov-west-1", "123456789012", "db", "tbl")
     assertEquals(arn, "arn:aws-us-gov:glue:us-gov-west-1:123456789012:table/db/tbl")
+  }
+
+  @Test
+  def testSeedLfPrefixCreatesMarkerFile(): Unit = {
+    val tmpDir = Files.createTempDirectory("seedLfPrefixTest")
+    try {
+      val uri = tmpDir.toUri.toString.stripSuffix("/")
+      LakeFormationHelper.seedLfPrefix(sparkSession, uri)
+      val markerFile = tmpDir.resolve("_feature_store_spark_init")
+      assertTrue(Files.exists(markerFile))
+    } finally {
+      // Hadoop's local FileSystem creates .crc files alongside the marker,
+      // so we must delete all contents before removing the directory.
+      Files
+        .walk(tmpDir)
+        .sorted(java.util.Comparator.reverseOrder())
+        .forEach(Files.deleteIfExists(_))
+    }
+  }
+
+  @Test
+  def testSeedLfPrefixSwallowsNonAccessControlException(): Unit = {
+    // Use a URI with an unsupported scheme to trigger an Exception that is not AccessControlException.
+    // The method should catch and swallow it (log a warning) rather than propagating.
+    val bogusUri = "nosuchscheme://nonexistent/path/to/nowhere"
+    // Should not throw
+    LakeFormationHelper.seedLfPrefix(sparkSession, bogusUri)
   }
 }

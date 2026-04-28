@@ -32,4 +32,12 @@ class ClientFactoryTest extends TestNGSuite {
     assertNotNull(ClientFactory.stsAssumeRoleCredentialsProvider)
     assertEquals(ClientFactory.region, "us-west-2")
   }
+
+  @Test
+  def lakeFormationClientLazyCreationTest(): Unit = {
+    ClientFactory.initialize(region = "us-west-2")
+    val client = ClientFactory.lakeFormationClient
+    assertNotNull(client)
+    client.close()
+  }
 }
