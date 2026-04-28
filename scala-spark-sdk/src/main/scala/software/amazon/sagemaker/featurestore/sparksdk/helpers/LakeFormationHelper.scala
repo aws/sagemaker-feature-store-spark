@@ -116,11 +116,12 @@ object LakeFormationHelper {
       val markerPath = new Path(s"$s3aUri/_feature_store_spark_init")
       val out        = fs.create(markerPath, /* overwrite */ true)
       try out.close()
-      catch { case _: Throwable => () }
+      catch { case _: Exception => () }
       logger.info(s"Seeded LF-registered prefix with marker $markerPath")
     } catch {
-      case t: Throwable =>
-        logger.warn(s"Failed to seed LF-registered prefix $s3aUri: ${t.getMessage}")
+      case e: org.apache.hadoop.security.AccessControlException => throw e
+      case e: Exception =>
+        logger.warn(s"Failed to seed LF-registered prefix $s3aUri: ${e.getMessage}")
     }
   }
 
