@@ -311,6 +311,14 @@ Lake Formation temporary credentials have a TTL of approximately one hour. The c
 
 This can happen with very large DataFrames, small clusters, or skewed partition distributions. To avoid this, break large DataFrames into smaller batches and call `ingestData` / `ingest_data` separately for each batch. Each call vends fresh credentials, so keeping individual batches under ~20 minutes of write time provides a comfortable margin. Splitting by event time is recommended since it aligns with the offline store's partitioning scheme. This approach works for both Iceberg and Glue (Hive-partitioned) table formats.
 
+#### Credential Visibility in Shared SparkContext Environments
+
+When Lake Formation credential vending is enabled, the connector writes temporary AWS credentials to the Spark session's Hadoop configuration as per-bucket S3A properties. This is required because Spark distributes the Hadoop configuration to executors for S3 writes.
+
+These credentials are visible to any code running in the same `SparkContext`. In single-tenant environments (dedicated EMR cluster, standalone PySpark, Docker container), this is not a concern. In multi-tenant environments where multiple users share a `SparkContext` (e.g., shared EMR notebooks), other code in the same context could read the credentials.
+
+Lake Formation temporary credentials are short-lived (~1 hour TTL) and scoped to a specific S3 prefix. For environments where credential isolation is required, run ingestion jobs on a dedicated cluster or in a separate Spark application.
+
 ## Development
 
 ### New Features
