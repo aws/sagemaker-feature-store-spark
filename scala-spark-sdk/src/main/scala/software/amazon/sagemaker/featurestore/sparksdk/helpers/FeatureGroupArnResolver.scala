@@ -52,6 +52,24 @@ class FeatureGroupArnResolver(val featureGroupArn: String) {
     featureGroupArnParts(3)
   }
 
+  /** Resolve account ID from arn
+   *
+   *  @return
+   *    account ID
+   */
+  def resolveAccountId(): String = {
+    featureGroupArnParts(4)
+  }
+
+  /** Resolve partition from arn (e.g. aws, aws-cn, aws-us-gov)
+   *
+   *  @return
+   *    partition
+   */
+  def resolvePartition(): String = {
+    featureGroupArnParts(1)
+  }
+
   private def verifyFeatureGroupArn(): Unit = {
     val pattern = new Regex(FEATURE_GROUP_ARN_PATTERN).pattern
     if (!pattern.matcher(featureGroupArn).matches()) {

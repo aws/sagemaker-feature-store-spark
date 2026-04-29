@@ -294,7 +294,15 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
     withObjectMocked[SparkSessionInitializer.type] {
       doNothing()
         .when(SparkSessionInitializer)
-        .initializeSparkSessionForIcebergTable(any(), anyString(), anyString(), anyString(), anyString(), anyString())
+        .initializeSparkSessionForIcebergTable(
+          any(),
+          anyString(),
+          anyString(),
+          anyString(),
+          anyString(),
+          anyString(),
+          any()
+        )
 
       // Create a local derby local database which enables to create local metastores for unit tests
       sparkSession.conf.set("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")

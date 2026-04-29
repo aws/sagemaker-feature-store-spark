@@ -13,9 +13,26 @@
 
 import string
 from typing import List
+
+import pyspark
 from pyspark.sql import DataFrame
 
 from feature_store_pyspark.wrapper import SageMakerFeatureStoreJavaWrapper
+
+
+def _is_pyspark_35_or_newer() -> bool:
+    """Return True if the installed PySpark version is >= 3.5.
+
+    Lake Formation credential vending support in the Scala JAR is only built for
+    Spark 3.5+. This helper lets ingest_data gate that feature at runtime.
+    Uses only stdlib + pyspark to avoid adding a ``packaging`` dependency.
+    """
+    try:
+        major_minor = tuple(int(p) for p in pyspark.__version__.split(".")[:2])
+    except (ValueError, AttributeError):
+        # If the version string is malformed, err on the safe side (treat as older).
+        return False
+    return major_minor >= (3, 5)
 
 
 class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
@@ -31,17 +48,28 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         super(FeatureStoreManager, self).__init__()
         self._java_obj = self._new_java_obj(FeatureStoreManager._wrapped_class, assume_role_arn)
 
-    def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: str, target_stores: List[str] = None):
+    def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: str, target_stores: List[str] = None,
+                    use_lake_formation_credentials: bool = False):
         """
         Batch ingest data into SageMaker FeatureStore.
 
         :param input_data_frame (DataFrame): the DataFrame to be ingested.
         :param feature_group_arn (str): target feature group arn.
         :param target_stores (List[str]): a list of target stores which the data should be ingested to.
+        :param use_lake_formation_credentials (bool): whether to use LakeFormation for offline store ingestion.
+            Defaults to False. Requires PySpark 3.5 or newer; setting this to True on older
+            PySpark versions will raise ``ValueError`` because the bundled Scala JAR for
+            PySpark < 3.5 does not include Lake Formation support.
 
         :return:
         """
-        return self._call_java("ingestDataInJava", input_data_frame, feature_group_arn, target_stores)
+        if not _is_pyspark_35_or_newer() and use_lake_formation_credentials:
+            raise ValueError(
+                "Lake Formation credential vending requires PySpark 3.5 or newer; "
+                f"detected PySpark {pyspark.__version__}"
+            )
+        return self._call_java("ingestDataInJava", input_data_frame, feature_group_arn, target_stores,
+                               use_lake_formation_credentials)
 
     def load_feature_definitions_from_schema(self, input_data_frame: DataFrame):
         """

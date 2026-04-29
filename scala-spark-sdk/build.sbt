@@ -23,6 +23,15 @@ lazy val SageMakerFeatureStoreSpark = (project in file(".")).settings(
 val sparkVersion = System.getProperty("SPARK_VERSION", "3.3.4")
 val majorSparkVersion = sparkVersion.substring(0, sparkVersion.lastIndexOf("."))
 
+// Parse major.minor parts as integers for correct version comparison
+// (e.g. "3.10" must be greater than "3.5", which toDouble would break)
+val sparkVersionParts = majorSparkVersion.split("\\.").map(_.toInt)
+val sparkMajor = sparkVersionParts(0)
+val sparkMinor = sparkVersionParts(1)
+
+def sparkVersionAtLeast(major: Int, minor: Int): Boolean =
+  sparkMajor > major || (sparkMajor == major && sparkMinor >= minor)
+
 val awsSDKVersion = "2.18.32"
 val sparkVersionToHadoopVersionMap = Map(
   "3.1" -> "3.2.4",
@@ -34,10 +43,21 @@ val sparkVersionToHadoopVersionMap = Map(
 
 Compile / unmanagedSourceDirectories += {
   val baseDir = baseDirectory.value
-  if (majorSparkVersion.toDouble >= 3.5) {
+  if (sparkVersionAtLeast(3, 5)) {
     baseDir / "src" / "main" / "scala-spark-3.5"
   } else {
     baseDir / "src" / "main" / "scala-spark-3.1-3.4"
+  }
+}
+
+// Gate Lake Formation test sources the same way as main sources: tests that reference LF classes
+// only compile on Spark 3.5+.
+Test / unmanagedSourceDirectories += {
+  val baseDir = baseDirectory.value
+  if (sparkVersionAtLeast(3, 5)) {
+    baseDir / "src" / "test" / "scala-spark-3.5"
+  } else {
+    baseDir / "src" / "test" / "scala-spark-3.1-3.4"
   }
 }
 
@@ -63,6 +83,7 @@ libraryDependencies ++= Seq(
   "software.amazon.awssdk" % "sagemakerfeaturestoreruntime" % awsSDKVersion,
 
   "software.amazon.awssdk" % "glue" % awsSDKVersion,
+  "software.amazon.awssdk" % "lakeformation" % awsSDKVersion,
   "software.amazon.awssdk" % "s3" % awsSDKVersion,
   "software.amazon.awssdk" % "dynamodb" % awsSDKVersion,
   "software.amazon.awssdk" % "kms" % awsSDKVersion,
@@ -79,12 +100,22 @@ libraryDependencies ++= Seq(
   "org.apache.hadoop" % "hadoop-common" %  sparkVersionToHadoopVersionMap(majorSparkVersion) % Provided,
   "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
   "org.apache.spark" %% "spark-sql" % sparkVersion % Provided,
+  "org.slf4j" % "slf4j-api" % "1.7.36" % Provided,
 
   // Test dependencies
   "org.mockito" %% "mockito-scala-scalatest" % "1.17.12" % Test,
   "org.scalatest" %% "scalatest" % "3.0.8" % Test,
   "org.scalatestplus" %% "testng-6-7" % "3.2.9.0" % Test,
 )
+
+// Lake Formation support is gated to Spark 3.5+. spark-hadoop-cloud provides the S3A magic
+// committer required by LF-credential-scoped writes; it is not needed on 3.1-3.4 where LF is absent.
+val lfDeps =
+  if (sparkVersionAtLeast(3, 5))
+    Seq("org.apache.spark" %% "spark-hadoop-cloud" % sparkVersion % Provided)
+  else
+    Seq.empty
+libraryDependencies ++= lfDeps
 
 
 // shadow all dependencies when building the assembly jar otherwise it is possible that either direct or
@@ -104,6 +135,7 @@ printClasspath := (Runtime / fullClasspath value) foreach { e => println(e.data)
 
 assembly / assemblyMergeStrategy := {
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case PathList("org", "slf4j", xs @ _*) => MergeStrategy.discard
   case x => MergeStrategy.first
 }
 
@@ -116,6 +148,9 @@ jacocoReportSettings := JacocoReportSettings()
 publishMavenStyle := true
 pomIncludeRepository := { _ => false }
 Test / publishArtifact := false
+// Tests share a JVM-global SparkSession via getOrCreate(); run them sequentially
+// to avoid races on the shared SparkContext.hadoopConfiguration across test classes.
+Test / parallelExecution := false
 val nexusUriHost = "aws.oss.sonatype.org"
 val nexusUriHostWithScheme = "https://" + nexusUriHost + "/"
 val snapshotUrl = nexusUriHostWithScheme + "content/repositories/snapshots"

@@ -21,6 +21,7 @@ import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration
 import software.amazon.awssdk.core.retry.RetryPolicy
 import software.amazon.awssdk.http.apache.ApacheHttpClient
 import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.lakeformation.LakeFormationClient
 import software.amazon.awssdk.services.sagemaker.SageMakerClient
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.{
   SageMakerFeatureStoreRuntimeClient,
@@ -44,6 +45,7 @@ object ClientFactory {
   private var _sageMakerClient: Option[SageMakerClient]                                                     = None
   private var _sageMakerFeatureStoreRuntimeClientBuilder: Option[SageMakerFeatureStoreRuntimeClientBuilder] = None
   private var _skipInitialization: Boolean                                                                  = false
+  private var _lakeFormationClient: Option[LakeFormationClient]                                             = None
 
   // Getters
   def sageMakerClient: SageMakerClient = _sageMakerClient.orNull
@@ -53,6 +55,14 @@ object ClientFactory {
   def region: String                                                     = _region.orNull
   def stsAssumeRoleCredentialsProvider: StsAssumeRoleCredentialsProvider = _stsAssumeRoleCredentialsProvider.orNull
   def skipInitialization: Boolean                                        = _skipInitialization
+
+  def lakeFormationClient: LakeFormationClient = synchronized {
+    _lakeFormationClient.getOrElse {
+      val client = getDefaultLakeFormationClient
+      _lakeFormationClient = Some(client)
+      client
+    }
+  }
 
   // Setters
   @VisibleForTesting
@@ -70,6 +80,8 @@ object ClientFactory {
     _stsAssumeRoleCredentialsProvider = Option(credentialsProvider)
   @VisibleForTesting
   def skipInitialization_=(skipInitialization: Boolean): Unit = _skipInitialization = skipInitialization
+  @VisibleForTesting
+  def lakeFormationClient_=(client: LakeFormationClient): Unit = _lakeFormationClient = Option(client)
 
   /** Initialize the client factory
    *
@@ -89,6 +101,7 @@ object ClientFactory {
     this.stsAssumeRoleCredentialsProvider = getStsAssumeRoleCredentialsProvider
     this.sageMakerClient = getDefaultSageMakerClient
     this.sageMakerFeatureStoreRuntimeClientBuilder = getDefaultFeatureStoreRuntimeClientBuilder
+    this._lakeFormationClient = None
   }
 
   private def getDefaultSageMakerClient: SageMakerClient = {
@@ -141,5 +154,18 @@ object ClientFactory {
     val stsClient = StsClient.builder().httpClient(ApacheHttpClient.builder().build()).region(Region.of(region)).build()
 
     StsAssumeRoleCredentialsProvider.builder.stsClient(stsClient).refreshRequest(assumeRoleRequest).build()
+  }
+
+  private def getDefaultLakeFormationClient: LakeFormationClient = {
+    val builder = LakeFormationClient
+      .builder()
+      .region(Region.of(region))
+      .httpClient(ApacheHttpClient.builder().build())
+
+    if (_assumeRoleArn.nonEmpty) {
+      builder.credentialsProvider(stsAssumeRoleCredentialsProvider)
+    }
+
+    builder.build()
   }
 }

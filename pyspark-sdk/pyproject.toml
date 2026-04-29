@@ -29,6 +29,9 @@ unit = [
 integ = [
     "boto3",
     "numpy",
+    "sagemaker-mlops>=1.8",
+    "sagemaker-core>=2.8",
+    "pyiceberg[glue,pyarrow,pandas]>=0.9.0",
 ]
 lint = [
     "flake8>=6.0.0",
