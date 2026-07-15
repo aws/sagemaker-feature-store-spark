@@ -32,7 +32,7 @@ val sparkMinor = sparkVersionParts(1)
 def sparkVersionAtLeast(major: Int, minor: Int): Boolean =
   sparkMajor > major || (sparkMajor == major && sparkMinor >= minor)
 
-val awsSDKVersion = "2.18.32"
+val awsSDKVersion = "2.46.18"
 val sparkVersionToHadoopVersionMap = Map(
   "3.1" -> "3.2.4",
   "3.2" -> "3.2.4",
@@ -89,6 +89,7 @@ libraryDependencies ++= Seq(
   "software.amazon.awssdk" % "kms" % awsSDKVersion,
   "software.amazon.awssdk" % "sts" % awsSDKVersion,
   "software.amazon.awssdk" % "url-connection-client" % awsSDKVersion,
+  "software.amazon.awssdk" % "apache-client" % awsSDKVersion,
 
   "org.apache.iceberg" %% s"iceberg-spark-runtime-$majorSparkVersion" % icebergVersion,
 
@@ -128,6 +129,9 @@ assembly / assemblyShadeRules := Seq(
   ShadeRule.rename("org.apache.http.**" -> "smfs.shaded.org.apache.hc.@1").inAll,
   ShadeRule.rename("org.apache.iceberg.**" -> "smfs.shaded.org.apache.iceberg.@1").inAll,
 )
+
+// Exclude the SDK's netty-nio-client to avoid conflicts with Spark's bundled Netty
+excludeDependencies += ExclusionRule("software.amazon.awssdk", "netty-nio-client")
 
 exportJars := true
 lazy val printClasspath = taskKey[Unit]("Dump classpath")

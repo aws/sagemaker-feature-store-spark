@@ -41,7 +41,14 @@ import software.amazon.awssdk.services.sagemaker.model.{
   FeatureType
 }
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.SageMakerFeatureStoreRuntimeClient
-import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{FeatureValue, PutRecordRequest, TargetStore}
+import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{
+  BatchWriteRecordEntry,
+  BatchWriteRecordRequest,
+  FeatureValue,
+  ListRecordsRequest,
+  PutRecordRequest,
+  TargetStore
+}
 import org.slf4j.LoggerFactory
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.{StreamIngestionFailureException, ValidationError}
 import software.amazon.sagemaker.featurestore.sparksdk.helpers.{
@@ -86,16 +93,21 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
    *    choose the target store to ingest the data
    *  @param useLakeFormationCredentials
    *    whether to use LakeFormation for offline store ingestion (default: false)
+   *  @param useBatchWriteRecord
+   *    whether to use BatchWriteRecord API (25 records per call) instead of PutRecord (1 record per call) for online
+   *    store ingestion. Requires both sagemaker:BatchWriteRecord AND sagemaker:PutRecord IAM permissions. (default:
+   *    false)
    */
   def ingestData(
       inputDataFrame: DataFrame,
       featureGroupArn: String,
       targetStores: List[String] = null,
-      useLakeFormationCredentials: Boolean = false
+      useLakeFormationCredentials: Boolean = false,
+      useBatchWriteRecord: Boolean = false
   ): Unit = {
 
     logger.info(
-      s"ingestData: featureGroupArn=$featureGroupArn, targetStores=$targetStores, useLakeFormationCredentials=$useLakeFormationCredentials"
+      s"ingestData: featureGroupArn=$featureGroupArn, targetStores=$targetStores, useLakeFormationCredentials=$useLakeFormationCredentials, useBatchWriteRecord=$useBatchWriteRecord"
     )
 
     val featureGroupArnResolver = new FeatureGroupArnResolver(featureGroupArn)
@@ -115,7 +127,7 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
 
     if (parsedTargetStores == null || shouldIngestInStream(parsedTargetStores)) {
       validateSchemaNames(inputDataFrame.schema.names, describeResponse, recordIdentifierName, eventTimeFeatureName)
-      streamIngestIntoOnlineStore(featureGroupName, inputDataFrame, parsedTargetStores, region)
+      streamIngestIntoOnlineStore(featureGroupName, inputDataFrame, parsedTargetStores, region, useBatchWriteRecord)
     } else {
 
       val validatedInputDataFrame = validateInputDataFrame(inputDataFrame, describeResponse)
@@ -135,13 +147,15 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
       inputDataFrame: org.apache.spark.sql.Dataset[Row],
       featureGroupArn: java.lang.String,
       targetStores: java.util.ArrayList[String] = null,
-      useLakeFormationCredentials: java.lang.Boolean = false
+      useLakeFormationCredentials: java.lang.Boolean = false,
+      useBatchWriteRecord: java.lang.Boolean = false
   ): Unit = {
     ingestData(
       inputDataFrame,
       featureGroupArn,
       if (targetStores != null) targetStores.asScala.toList else null,
-      Option(useLakeFormationCredentials).map(_.booleanValue()).getOrElse(false)
+      Option(useLakeFormationCredentials).map(_.booleanValue()).getOrElse(false),
+      Option(useBatchWriteRecord).map(_.booleanValue()).getOrElse(false)
     )
   }
 
@@ -181,11 +195,52 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     failedStreamIngestionDataFrame.orNull
   }
 
+  /** List record identifiers from a FeatureGroup's OnlineStore (single page).
+   *
+   *  @param featureGroupArn
+   *    ARN or name of the feature group
+   *  @param maxResults
+   *    maximum number of record identifiers to return (1-100)
+   *  @param nextToken
+   *    pagination token from a previous response
+   *  @param includeSoftDeletedRecords
+   *    if true, include soft-deleted records
+   *  @return
+   *    tuple of (list of record identifier strings, nextToken or null)
+   */
+  def listRecords(
+      featureGroupArn: String,
+      maxResults: java.lang.Integer = null,
+      nextToken: String = null,
+      includeSoftDeletedRecords: Boolean = false
+  ): java.util.Map[String, Object] = {
+    val featureGroupName = featureGroupArn
+    val region           = new FeatureGroupArnResolver(featureGroupArn).resolveRegion()
+    ClientFactory.initialize(region = region, roleArn = assumeRoleArn)
+
+    val requestBuilder = ListRecordsRequest
+      .builder()
+      .featureGroupName(featureGroupName)
+      .includeSoftDeletedRecords(includeSoftDeletedRecords)
+
+    if (maxResults != null) requestBuilder.maxResults(maxResults)
+    if (nextToken != null) requestBuilder.nextToken(nextToken)
+
+    val client   = ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder.build()
+    val response = client.listRecords(requestBuilder.build())
+
+    val result = new java.util.HashMap[String, Object]()
+    result.put("RecordIdentifiers", response.recordIdentifiers())
+    result.put("NextToken", response.nextToken())
+    result
+  }
+
   private def streamIngestIntoOnlineStore(
       featureGroupName: String,
       inputDataFrame: DataFrame,
       targetStores: List[TargetStore],
-      region: String
+      region: String,
+      useBatchWriteRecord: Boolean = false
   ): Unit = {
     val columns                = inputDataFrame.schema.names
     val repartitionedDataFrame = DataFrameRepartitioner.repartition(inputDataFrame)
@@ -196,6 +251,13 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     )
     val fieldIndexMap = castWithExceptionSchema.fieldNames.zipWithIndex.toMap
 
+    if (useBatchWriteRecord) {
+      logger.info(
+        s"Using BatchWriteRecord API (batch_size=25). " +
+          s"Requires sagemaker:BatchWriteRecord AND sagemaker:PutRecord IAM permissions."
+      )
+    }
+
     // Encoder needs to be defined during transformation because the original schema is changed.
     // The dataframe has to be cached otherwise the input dataset will be re-ingested when customer perform spark
     // actions on failedStreamIngestionDataFrame.
@@ -204,13 +266,23 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
         .mapPartitions(partition => {
           ClientFactory.initialize(region, assumeRoleArn)
 
-          putOnlineRecordsForPartition(
-            partition,
-            featureGroupName,
-            columns,
-            targetStores,
-            ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder.build()
-          )
+          if (useBatchWriteRecord) {
+            batchWriteOnlineRecordsForPartition(
+              partition,
+              featureGroupName,
+              columns,
+              targetStores,
+              ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder.build()
+            )
+          } else {
+            putOnlineRecordsForPartition(
+              partition,
+              featureGroupName,
+              columns,
+              targetStores,
+              ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder.build()
+            )
+          }
         })(SparkRowEncoderAdaptor.encoderFor(castWithExceptionSchema))
         .filter(row => row.getAs[String](fieldIndexMap(ONLINE_INGESTION_ERROR_FILED_NAME)) != null)
         .cache()
@@ -270,6 +342,105 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     })
 
     newPartition
+  }
+
+  private val BATCH_WRITE_MAX_ENTRIES = 25
+
+  private def batchWriteOnlineRecordsForPartition(
+      partition: Iterator[Row],
+      featureGroupName: String,
+      columns: Array[String],
+      targetStores: List[TargetStore],
+      runTimeClient: SageMakerFeatureStoreRuntimeClient
+  ): Iterator[Row] = {
+    val results = ListBuffer[Row]()
+
+    partition.grouped(BATCH_WRITE_MAX_ENTRIES).foreach { batch =>
+      val batchRows = batch.toList
+      val entries   = ListBuffer[BatchWriteRecordEntry]()
+
+      batchRows.foreach { row =>
+        val record = ListBuffer[FeatureValue]()
+        columns.foreach { columnName =>
+          try {
+            if (!row.isNullAt(row.fieldIndex(columnName))) {
+              val featureValue = row.getAs[Any](columnName)
+              record += FeatureValue
+                .builder()
+                .featureName(columnName)
+                .valueAsString(featureValue.toString)
+                .build()
+            }
+          } catch {
+            case e: Throwable => throw new RuntimeException(e)
+          }
+        }
+
+        val entryBuilder = BatchWriteRecordEntry
+          .builder()
+          .featureGroupName(featureGroupName)
+          .record(record.asJava)
+
+        if (targetStores != null) {
+          entryBuilder.targetStores(targetStores.asJava)
+        }
+
+        entries += entryBuilder.build()
+      }
+
+      Try {
+        val request = BatchWriteRecordRequest
+          .builder()
+          .entries(entries.asJava)
+          .build()
+        runTimeClient.batchWriteRecord(request)
+      } match {
+        case Success(response) =>
+          // Build a set of failed entry indices by matching error.entry() and unprocessedEntries
+          val failedEntryIndices = scala.collection.mutable.Set[Int]()
+
+          // Map errors back to specific entries
+          val errorEntries = response.errors().asScala
+          errorEntries.foreach { error =>
+            val failedEntry = error.entry()
+            val idx         = entries.indexOf(failedEntry)
+            if (idx >= 0) {
+              failedEntryIndices += idx
+            }
+          }
+
+          // Map unprocessed entries back to specific entries
+          val unprocessed = response.unprocessedEntries().asScala
+          unprocessed.foreach { entry =>
+            val idx = entries.indexOf(entry)
+            if (idx >= 0) {
+              failedEntryIndices += idx
+            }
+          }
+
+          // Mark only failed rows with error, successful rows get null
+          batchRows.zipWithIndex.foreach { case (row, idx) =>
+            val errorMessage = if (failedEntryIndices.contains(idx)) {
+              val errorDetail = errorEntries
+                .find(e => entries.indexOf(e.entry()) == idx)
+                .map(e => s"${e.errorCode()}: ${e.errorMessage()}")
+                .getOrElse("Unprocessed entry")
+              errorDetail
+            } else {
+              null
+            }
+            results += Row.fromSeq(row.toSeq.toList :+ errorMessage)
+          }
+
+        case Failure(ex) =>
+          // Entire batch failed — mark all rows with the exception message
+          batchRows.foreach { row =>
+            results += Row.fromSeq(row.toSeq.toList :+ ex.getMessage)
+          }
+      }
+    }
+
+    results.iterator
   }
 
   private def batchIngestIntoOfflineStore(
