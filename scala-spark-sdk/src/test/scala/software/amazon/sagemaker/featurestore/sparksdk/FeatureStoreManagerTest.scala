@@ -27,7 +27,13 @@ import software.amazon.awssdk.services.sagemaker.model.{
   TableFormat
 }
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{
+  BatchWriteRecordEntry,
+  BatchWriteRecordError,
+  BatchWriteRecordRequest,
+  BatchWriteRecordResponse,
   FeatureValue,
+  ListRecordsRequest,
+  ListRecordsResponse,
   PutRecordRequest,
   PutRecordResponse,
   TargetStore
@@ -68,9 +74,27 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
     ClientFactory.sageMakerClient = mockedSageMakerClient
     ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder = mockedSageMakerFeatureStoreRuntimeClientBuilder
 
+    org.mockito.Mockito.reset(mockedSageMakerFeatureStoreRuntimeClient)
+    org.mockito.Mockito.reset(mockedSageMakerClient)
+
     when(mockedSageMakerFeatureStoreRuntimeClientBuilder.build()).thenReturn(mockedSageMakerFeatureStoreRuntimeClient)
     when(mockedSageMakerFeatureStoreRuntimeClient.putRecord(any(classOf[PutRecordRequest])))
       .thenReturn(PutRecordResponse.builder().build())
+    when(mockedSageMakerFeatureStoreRuntimeClient.batchWriteRecord(any(classOf[BatchWriteRecordRequest])))
+      .thenReturn(
+        BatchWriteRecordResponse
+          .builder()
+          .errors(java.util.Collections.emptyList[BatchWriteRecordError]())
+          .unprocessedEntries(java.util.Collections.emptyList[BatchWriteRecordEntry]())
+          .build()
+      )
+    when(mockedSageMakerFeatureStoreRuntimeClient.listRecords(any(classOf[ListRecordsRequest])))
+      .thenReturn(
+        ListRecordsResponse
+          .builder()
+          .recordIdentifiers(java.util.Arrays.asList("id-1", "id-2"))
+          .build()
+      )
   }
 
   @Test(dataProvider = "ingestDataStreamOnlineStoreTestDataProvider")
@@ -393,6 +417,375 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
       inputDataFrame: DataFrame
   ): Unit = {
     featureStoreManager.loadFeatureDefinitionsFromSchema(inputDataFrame)
+  }
+
+  @Test
+  def ingestDataStreamOnlineStoreWithBatchWriteRecordTest(): Unit = {
+    val inputDataFrame = Seq(
+      ("identifier-1", "2021-05-06T05:12:14Z"),
+      ("identifier-2", "2021-05-06T05:12:14Z")
+    ).toDF("record-identifier", "event-time")
+
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .eventTimeFeatureName("event-time")
+      .recordIdentifierFeatureName("record-identifier")
+      .featureDefinitions(
+        FeatureDefinition.builder().featureName("record-identifier").featureType(FeatureType.STRING).build(),
+        FeatureDefinition.builder().featureName("event-time").featureType(FeatureType.STRING).build()
+      )
+      .onlineStoreConfig(OnlineStoreConfig.builder().enableOnlineStore(true).build())
+      .build()
+
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+
+    featureStoreManager.ingestData(
+      inputDataFrame,
+      TEST_FEATURE_GROUP_ARN,
+      List("OnlineStore"),
+      useLakeFormationCredentials = false,
+      useBatchWriteRecord = true
+    )
+
+    verify(mockedSageMakerFeatureStoreRuntimeClient, org.mockito.Mockito.atLeastOnce())
+      .batchWriteRecord(any(classOf[BatchWriteRecordRequest]))
+    verify(mockedSageMakerFeatureStoreRuntimeClient, times(0)).putRecord(any(classOf[PutRecordRequest]))
+
+    val failedDf = featureStoreManager.getFailedStreamIngestionDataFrame
+    assertEquals(failedDf.count(), 0)
+  }
+
+  @Test
+  def ingestDataStreamOnlineStoreWithBatchWriteRecordPartialFailureTest(): Unit = {
+    val inputDataFrame = Seq(
+      ("identifier-1", "2021-05-06T05:12:14Z"),
+      ("identifier-2", "2021-05-06T05:12:14Z")
+    ).toDF("record-identifier", "event-time")
+
+    val failedEntry = BatchWriteRecordEntry
+      .builder()
+      .featureGroupName(TEST_FEATURE_GROUP_ARN)
+      .record(
+        java.util.Arrays.asList(
+          FeatureValue.builder().featureName("record-identifier").valueAsString("identifier-2").build(),
+          FeatureValue.builder().featureName("event-time").valueAsString("2021-05-06T05:12:14Z").build()
+        )
+      )
+      .targetStores(java.util.Arrays.asList(TargetStore.ONLINE_STORE))
+      .build()
+
+    val errorResponse = BatchWriteRecordResponse
+      .builder()
+      .errors(
+        java.util.Arrays.asList(
+          BatchWriteRecordError
+            .builder()
+            .entry(failedEntry)
+            .errorCode("ValidationError")
+            .errorMessage("Test validation error")
+            .build()
+        )
+      )
+      .unprocessedEntries(java.util.Collections.emptyList[BatchWriteRecordEntry]())
+      .build()
+
+    when(mockedSageMakerFeatureStoreRuntimeClient.batchWriteRecord(any(classOf[BatchWriteRecordRequest])))
+      .thenReturn(errorResponse)
+
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .eventTimeFeatureName("event-time")
+      .recordIdentifierFeatureName("record-identifier")
+      .featureDefinitions(
+        FeatureDefinition.builder().featureName("record-identifier").featureType(FeatureType.STRING).build(),
+        FeatureDefinition.builder().featureName("event-time").featureType(FeatureType.STRING).build()
+      )
+      .onlineStoreConfig(OnlineStoreConfig.builder().enableOnlineStore(true).build())
+      .build()
+
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+
+    val caught = intercept[StreamIngestionFailureException] {
+      featureStoreManager.ingestData(
+        inputDataFrame,
+        TEST_FEATURE_GROUP_ARN,
+        List("OnlineStore"),
+        useLakeFormationCredentials = false,
+        useBatchWriteRecord = true
+      )
+    }
+
+    caught.message.contains("records failed to be ingested") shouldBe true
+
+    val failedDf = featureStoreManager.getFailedStreamIngestionDataFrame
+    // Verify exactly 1 row failed (identifier-2), not both
+    assertEquals(failedDf.count(), 1L)
+    // Verify the correct row (identifier-2) is in the failed DataFrame
+    val failedRow = failedDf.first()
+    assertEquals(failedRow.getAs[String]("record-identifier"), "identifier-2")
+    // Verify the error message is captured
+    assertEquals(failedRow.getAs[String]("online_ingestion_error"), "ValidationError: Test validation error")
+  }
+
+  @Test
+  def ingestDataStreamOnlineStoreWithBatchWriteRecordPartialFailureMultiRowTest(): Unit = {
+    // 5 records: only record at index 2 (identifier-3) fails
+    val inputDataFrame = Seq(
+      ("identifier-1", "2021-05-06T05:12:14Z"),
+      ("identifier-2", "2021-05-06T05:12:14Z"),
+      ("identifier-3", "2021-05-06T05:12:14Z"),
+      ("identifier-4", "2021-05-06T05:12:14Z"),
+      ("identifier-5", "2021-05-06T05:12:14Z")
+    ).toDF("record-identifier", "event-time")
+
+    val failedEntry = BatchWriteRecordEntry
+      .builder()
+      .featureGroupName(TEST_FEATURE_GROUP_ARN)
+      .record(
+        java.util.Arrays.asList(
+          FeatureValue.builder().featureName("record-identifier").valueAsString("identifier-3").build(),
+          FeatureValue.builder().featureName("event-time").valueAsString("2021-05-06T05:12:14Z").build()
+        )
+      )
+      .targetStores(java.util.Arrays.asList(TargetStore.ONLINE_STORE))
+      .build()
+
+    val errorResponse = BatchWriteRecordResponse
+      .builder()
+      .errors(
+        java.util.Arrays.asList(
+          BatchWriteRecordError
+            .builder()
+            .entry(failedEntry)
+            .errorCode("InternalError")
+            .errorMessage("Internal service error")
+            .build()
+        )
+      )
+      .unprocessedEntries(java.util.Collections.emptyList[BatchWriteRecordEntry]())
+      .build()
+
+    when(mockedSageMakerFeatureStoreRuntimeClient.batchWriteRecord(any(classOf[BatchWriteRecordRequest])))
+      .thenReturn(errorResponse)
+
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .eventTimeFeatureName("event-time")
+      .recordIdentifierFeatureName("record-identifier")
+      .featureDefinitions(
+        FeatureDefinition.builder().featureName("record-identifier").featureType(FeatureType.STRING).build(),
+        FeatureDefinition.builder().featureName("event-time").featureType(FeatureType.STRING).build()
+      )
+      .onlineStoreConfig(OnlineStoreConfig.builder().enableOnlineStore(true).build())
+      .build()
+
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+
+    val caught = intercept[StreamIngestionFailureException] {
+      featureStoreManager.ingestData(
+        inputDataFrame,
+        TEST_FEATURE_GROUP_ARN,
+        List("OnlineStore"),
+        useLakeFormationCredentials = false,
+        useBatchWriteRecord = true
+      )
+    }
+
+    caught.message.contains("records failed to be ingested") shouldBe true
+
+    val failedDf = featureStoreManager.getFailedStreamIngestionDataFrame
+    // Only 1 out of 5 should fail
+    assertEquals(failedDf.count(), 1L)
+    // Verify it's specifically identifier-3 (index 2 in the batch)
+    val failedRow = failedDf.first()
+    assertEquals(failedRow.getAs[String]("record-identifier"), "identifier-3")
+    assertEquals(failedRow.getAs[String]("online_ingestion_error"), "InternalError: Internal service error")
+  }
+
+  @Test
+  def ingestDataStreamOnlineStoreWithBatchWriteRecordMultipleFailuresTest(): Unit = {
+    // 5 records: indices 1 (identifier-2) and 3 (identifier-4) fail
+    val inputDataFrame = Seq(
+      ("identifier-1", "2021-05-06T05:12:14Z"),
+      ("identifier-2", "2021-05-06T05:12:14Z"),
+      ("identifier-3", "2021-05-06T05:12:14Z"),
+      ("identifier-4", "2021-05-06T05:12:14Z"),
+      ("identifier-5", "2021-05-06T05:12:14Z")
+    ).toDF("record-identifier", "event-time")
+
+    val failedEntry1 = BatchWriteRecordEntry
+      .builder()
+      .featureGroupName(TEST_FEATURE_GROUP_ARN)
+      .record(
+        java.util.Arrays.asList(
+          FeatureValue.builder().featureName("record-identifier").valueAsString("identifier-2").build(),
+          FeatureValue.builder().featureName("event-time").valueAsString("2021-05-06T05:12:14Z").build()
+        )
+      )
+      .targetStores(java.util.Arrays.asList(TargetStore.ONLINE_STORE))
+      .build()
+
+    val failedEntry2 = BatchWriteRecordEntry
+      .builder()
+      .featureGroupName(TEST_FEATURE_GROUP_ARN)
+      .record(
+        java.util.Arrays.asList(
+          FeatureValue.builder().featureName("record-identifier").valueAsString("identifier-4").build(),
+          FeatureValue.builder().featureName("event-time").valueAsString("2021-05-06T05:12:14Z").build()
+        )
+      )
+      .targetStores(java.util.Arrays.asList(TargetStore.ONLINE_STORE))
+      .build()
+
+    val errorResponse = BatchWriteRecordResponse
+      .builder()
+      .errors(
+        java.util.Arrays.asList(
+          BatchWriteRecordError
+            .builder()
+            .entry(failedEntry1)
+            .errorCode("ValidationError")
+            .errorMessage("Error on record 2")
+            .build(),
+          BatchWriteRecordError
+            .builder()
+            .entry(failedEntry2)
+            .errorCode("InternalError")
+            .errorMessage("Error on record 4")
+            .build()
+        )
+      )
+      .unprocessedEntries(java.util.Collections.emptyList[BatchWriteRecordEntry]())
+      .build()
+
+    when(mockedSageMakerFeatureStoreRuntimeClient.batchWriteRecord(any(classOf[BatchWriteRecordRequest])))
+      .thenReturn(errorResponse)
+
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .eventTimeFeatureName("event-time")
+      .recordIdentifierFeatureName("record-identifier")
+      .featureDefinitions(
+        FeatureDefinition.builder().featureName("record-identifier").featureType(FeatureType.STRING).build(),
+        FeatureDefinition.builder().featureName("event-time").featureType(FeatureType.STRING).build()
+      )
+      .onlineStoreConfig(OnlineStoreConfig.builder().enableOnlineStore(true).build())
+      .build()
+
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+
+    val caught = intercept[StreamIngestionFailureException] {
+      featureStoreManager.ingestData(
+        inputDataFrame,
+        TEST_FEATURE_GROUP_ARN,
+        List("OnlineStore"),
+        useLakeFormationCredentials = false,
+        useBatchWriteRecord = true
+      )
+    }
+
+    caught.message.contains("records failed to be ingested") shouldBe true
+
+    val failedDf = featureStoreManager.getFailedStreamIngestionDataFrame
+    // Exactly 2 out of 5 should fail
+    assertEquals(failedDf.count(), 2L)
+    // Verify the correct rows failed (identifier-2 and identifier-4)
+    val failedIds = failedDf.collect().map(_.getAs[String]("record-identifier")).sorted
+    assertEquals(failedIds.toList, List("identifier-2", "identifier-4"))
+    // Verify error messages are correct
+    val failedErrors = failedDf
+      .collect()
+      .map(row => (row.getAs[String]("record-identifier"), row.getAs[String]("online_ingestion_error")))
+      .toMap
+    assertEquals(failedErrors("identifier-2"), "ValidationError: Error on record 2")
+    assertEquals(failedErrors("identifier-4"), "InternalError: Error on record 4")
+  }
+
+  @Test
+  def ingestDataStreamOnlineStoreWithBatchWriteRecordFullFailureTest(): Unit = {
+    val inputDataFrame = Seq(
+      ("identifier-1", "2021-05-06T05:12:14Z")
+    ).toDF("record-identifier", "event-time")
+
+    when(mockedSageMakerFeatureStoreRuntimeClient.batchWriteRecord(any(classOf[BatchWriteRecordRequest])))
+      .thenThrow(new RuntimeException("batch write error"))
+
+    val response = DescribeFeatureGroupResponse
+      .builder()
+      .featureGroupArn(TEST_FEATURE_GROUP_ARN)
+      .featureGroupStatus(FeatureGroupStatus.CREATED)
+      .eventTimeFeatureName("event-time")
+      .recordIdentifierFeatureName("record-identifier")
+      .featureDefinitions(
+        FeatureDefinition.builder().featureName("record-identifier").featureType(FeatureType.STRING).build(),
+        FeatureDefinition.builder().featureName("event-time").featureType(FeatureType.STRING).build()
+      )
+      .onlineStoreConfig(OnlineStoreConfig.builder().enableOnlineStore(true).build())
+      .build()
+
+    when(mockedSageMakerClient.describeFeatureGroup(any(classOf[DescribeFeatureGroupRequest]))).thenReturn(response)
+
+    val caught = intercept[StreamIngestionFailureException] {
+      featureStoreManager.ingestData(
+        inputDataFrame,
+        TEST_FEATURE_GROUP_ARN,
+        List("OnlineStore"),
+        useLakeFormationCredentials = false,
+        useBatchWriteRecord = true
+      )
+    }
+
+    val failedDf = featureStoreManager.getFailedStreamIngestionDataFrame
+    assertEquals(failedDf.count(), 1)
+    assertEquals(failedDf.first().getAs[String]("online_ingestion_error"), "batch write error")
+  }
+
+  @Test
+  def listRecordsTest(): Unit = {
+    val result = featureStoreManager.listRecords(TEST_FEATURE_GROUP_ARN, maxResults = 10)
+
+    verify(mockedSageMakerFeatureStoreRuntimeClient, org.mockito.Mockito.atLeastOnce())
+      .listRecords(any(classOf[ListRecordsRequest]))
+    val identifiers = result.get("RecordIdentifiers").asInstanceOf[java.util.List[String]]
+    assertEquals(identifiers.size(), 2)
+    assertEquals(identifiers.get(0), "id-1")
+    assertEquals(identifiers.get(1), "id-2")
+  }
+
+  @Test
+  def listRecordsWithNextTokenTest(): Unit = {
+    val responseWithToken = ListRecordsResponse
+      .builder()
+      .recordIdentifiers(java.util.Arrays.asList("id-1"))
+      .nextToken("next-page-token")
+      .build()
+
+    when(mockedSageMakerFeatureStoreRuntimeClient.listRecords(any(classOf[ListRecordsRequest])))
+      .thenReturn(responseWithToken)
+
+    val result = featureStoreManager.listRecords(TEST_FEATURE_GROUP_ARN, maxResults = 1)
+
+    val nextToken = result.get("NextToken").asInstanceOf[String]
+    assertEquals(nextToken, "next-page-token")
+  }
+
+  @Test
+  def listRecordsWithSoftDeletedTest(): Unit = {
+    val result =
+      featureStoreManager.listRecords(TEST_FEATURE_GROUP_ARN, includeSoftDeletedRecords = true)
+
+    verify(mockedSageMakerFeatureStoreRuntimeClient, org.mockito.Mockito.atLeastOnce())
+      .listRecords(any(classOf[ListRecordsRequest]))
+    val identifiers = result.get("RecordIdentifiers").asInstanceOf[java.util.List[String]]
+    assertEquals(identifiers.size(), 2)
   }
 
   @DataProvider

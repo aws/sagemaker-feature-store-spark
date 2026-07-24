@@ -49,7 +49,7 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         self._java_obj = self._new_java_obj(FeatureStoreManager._wrapped_class, assume_role_arn)
 
     def ingest_data(self, input_data_frame: DataFrame, feature_group_arn: str, target_stores: List[str] = None,
-                    use_lake_formation_credentials: bool = False):
+                    use_lake_formation_credentials: bool = False, use_batch_write_record: bool = False):
         """
         Batch ingest data into SageMaker FeatureStore.
 
@@ -60,6 +60,10 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
             Defaults to False. Requires PySpark 3.5 or newer; setting this to True on older
             PySpark versions will raise ``ValueError`` because the bundled Scala JAR for
             PySpark < 3.5 does not include Lake Formation support.
+        :param use_batch_write_record (bool): whether to use BatchWriteRecord API (25 records
+            per call) instead of PutRecord (1 record per call) for online store ingestion.
+            Requires both ``sagemaker:BatchWriteRecord`` AND ``sagemaker:PutRecord`` IAM
+            permissions. Defaults to False.
 
         :return:
         """
@@ -69,7 +73,7 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
                 f"detected PySpark {pyspark.__version__}"
             )
         return self._call_java("ingestDataInJava", input_data_frame, feature_group_arn, target_stores,
-                               use_lake_formation_credentials)
+                               use_lake_formation_credentials, use_batch_write_record)
 
     def load_feature_definitions_from_schema(self, input_data_frame: DataFrame):
         """
@@ -92,3 +96,23 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
         :return: the DataFrame of records that fail to be ingested.
         """
         return self._call_java("getFailedStreamIngestionDataFrame")
+
+    def list_records(self, feature_group_arn: str, max_results: int = None,
+                     next_token: str = None, include_soft_deleted_records: bool = False):
+        """
+        List record identifiers from a FeatureGroup's OnlineStore (single page).
+
+        :param feature_group_arn (str): ARN or name of the feature group.
+        :param max_results (int): maximum number of record identifiers per page (1-100).
+        :param next_token (str): pagination token from a previous response.
+        :param include_soft_deleted_records (bool): if True, include soft-deleted records.
+
+        :return: dict with 'RecordIdentifiers' (list of str) and 'NextToken' (str or None)
+        """
+        result = self._call_java("listRecords", feature_group_arn, max_results,
+                                 next_token, include_soft_deleted_records)
+        return {
+            "RecordIdentifiers": list(result["RecordIdentifiers"]),
+            "NextToken": result["NextToken"],
+        }
+
