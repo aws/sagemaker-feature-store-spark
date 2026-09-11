@@ -32,7 +32,7 @@ val sparkMinor = sparkVersionParts(1)
 def sparkVersionAtLeast(major: Int, minor: Int): Boolean =
   sparkMajor > major || (sparkMajor == major && sparkMinor >= minor)
 
-val awsSDKVersion = "2.46.18"
+val awsSDKVersion = "2.54.16"
 val sparkVersionToHadoopVersionMap = Map(
   "3.1" -> "3.2.4",
   "3.2" -> "3.2.4",
