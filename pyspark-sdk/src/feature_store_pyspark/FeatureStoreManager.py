@@ -12,7 +12,7 @@
 # permissions and limitations under the License.
 
 import string
-from typing import List
+from typing import Dict, List
 
 import pyspark
 from pyspark.sql import DataFrame
@@ -115,4 +115,34 @@ class FeatureStoreManager(SageMakerFeatureStoreJavaWrapper):
             "RecordIdentifiers": list(result["RecordIdentifiers"]),
             "NextToken": result["NextToken"],
         }
+
+    def update_record(self, feature_group_arn: str, record_identifier_value_as_string: str,
+                      features: Dict[str, str], target_stores: List[str] = None,
+                      ttl_duration_unit: str = None, ttl_duration_value: int = None):
+        """
+        Perform a feature-level (partial) write to a record via the UpdateRecord API.
+
+        Only the features you supply are written; features not listed are preserved. This is
+        supported only for feature groups whose OnlineStore StorageType is ``Standard_V2`` or
+        ``InMemory``, and the record must already exist (use ``ingest_data`` to create it).
+        Pass the event-time feature as one of the entries in ``features``.
+
+        :param feature_group_arn (str): ARN or name of the feature group.
+        :param record_identifier_value_as_string (str): the record identifier value.
+        :param features (Dict[str, str]): feature name -> value (as string) to write (max 100).
+        :param target_stores (List[str]): stores to apply the update to; must include the
+            OnlineStore. Defaults to all stores configured on the feature group.
+        :param ttl_duration_unit (str): optional TtlDuration unit (e.g. "Days"); requires
+            ``ttl_duration_value`` and an event-time feature in ``features``.
+        :param ttl_duration_value (int): optional TtlDuration value; requires ``ttl_duration_unit``.
+
+        :return:
+        """
+        # Pass features as two parallel lists (names, values); py4j marshals lists cleanly
+        # whereas dicts are not converted to java.util.Map by PySpark's _py2java.
+        feature_names = list(features.keys())
+        feature_values = [str(features[name]) for name in feature_names]
+        return self._call_java("updateRecord", feature_group_arn, record_identifier_value_as_string,
+                               feature_names, feature_values, target_stores,
+                               ttl_duration_unit, ttl_duration_value)
 
