@@ -36,7 +36,10 @@ import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{
   ListRecordsResponse,
   PutRecordRequest,
   PutRecordResponse,
-  TargetStore
+  TargetStore,
+  TtlDuration,
+  UpdateRecordRequest,
+  UpdateRecordResponse
 }
 import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.{
   SageMakerFeatureStoreRuntimeClient,
@@ -95,6 +98,8 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
           .recordIdentifiers(java.util.Arrays.asList("id-1", "id-2"))
           .build()
       )
+    when(mockedSageMakerFeatureStoreRuntimeClient.updateRecord(any(classOf[UpdateRecordRequest])))
+      .thenReturn(UpdateRecordResponse.builder().build())
   }
 
   @Test(dataProvider = "ingestDataStreamOnlineStoreTestDataProvider")
@@ -786,6 +791,83 @@ class FeatureStoreManagerTest extends TestNGSuite with PrivateMethodTester {
       .listRecords(any(classOf[ListRecordsRequest]))
     val identifiers = result.get("RecordIdentifiers").asInstanceOf[java.util.List[String]]
     assertEquals(identifiers.size(), 2)
+  }
+
+  @Test
+  def updateRecordTest(): Unit = {
+    featureStoreManager.updateRecord(
+      TEST_FEATURE_GROUP_ARN,
+      "r-1",
+      java.util.Arrays.asList("city", "event_time"),
+      java.util.Arrays.asList("tacoma", "1700000000")
+    )
+
+    val captor = ArgCaptor[UpdateRecordRequest]
+    verify(mockedSageMakerFeatureStoreRuntimeClient).updateRecord(captor)
+    val request = captor.value
+    assertEquals(request.recordIdentifierValueAsString(), "r-1")
+    assertEquals(request.features().size(), 2)
+    assertEquals(request.features().get(0).featureName(), "city")
+    assertEquals(request.features().get(0).valueAsString(), "tacoma")
+    assertEquals(request.features().get(1).featureName(), "event_time")
+    // No TargetStores / TtlDuration supplied.
+    assertEquals(request.hasTargetStores(), false)
+    assertEquals(request.ttlDuration(), null)
+  }
+
+  @Test
+  def updateRecordWithTargetStoresAndTtlTest(): Unit = {
+    featureStoreManager.updateRecord(
+      TEST_FEATURE_GROUP_ARN,
+      "r-1",
+      java.util.Arrays.asList("city", "event_time"),
+      java.util.Arrays.asList("tacoma", "1700000060"),
+      java.util.Arrays.asList("OnlineStore"),
+      "Days",
+      7
+    )
+
+    val captor = ArgCaptor[UpdateRecordRequest]
+    verify(mockedSageMakerFeatureStoreRuntimeClient).updateRecord(captor)
+    val request = captor.value
+    assertEquals(request.targetStores().size(), 1)
+    assertEquals(request.targetStores().get(0), TargetStore.ONLINE_STORE)
+    assertEquals(request.ttlDuration().unitAsString(), "Days")
+    assertEquals(request.ttlDuration().value().intValue(), 7)
+  }
+
+  @Test(expectedExceptions = Array(classOf[IllegalArgumentException]))
+  def updateRecordMismatchedLengthsTest(): Unit = {
+    featureStoreManager.updateRecord(
+      TEST_FEATURE_GROUP_ARN,
+      "r-1",
+      java.util.Arrays.asList("city", "event_time"),
+      java.util.Arrays.asList("tacoma")
+    )
+  }
+
+  @Test(expectedExceptions = Array(classOf[IllegalArgumentException]))
+  def updateRecordOfflineOnlyTargetStoreTest(): Unit = {
+    featureStoreManager.updateRecord(
+      TEST_FEATURE_GROUP_ARN,
+      "r-1",
+      java.util.Arrays.asList("city"),
+      java.util.Arrays.asList("tacoma"),
+      java.util.Arrays.asList("OfflineStore")
+    )
+  }
+
+  @Test(expectedExceptions = Array(classOf[IllegalArgumentException]))
+  def updateRecordTtlUnitWithoutValueTest(): Unit = {
+    featureStoreManager.updateRecord(
+      TEST_FEATURE_GROUP_ARN,
+      "r-1",
+      java.util.Arrays.asList("city"),
+      java.util.Arrays.asList("tacoma"),
+      null,
+      "Days",
+      null
+    )
   }
 
   @DataProvider

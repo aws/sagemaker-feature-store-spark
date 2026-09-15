@@ -47,7 +47,9 @@ import software.amazon.awssdk.services.sagemakerfeaturestoreruntime.model.{
   FeatureValue,
   ListRecordsRequest,
   PutRecordRequest,
-  TargetStore
+  TargetStore,
+  TtlDuration,
+  UpdateRecordRequest
 }
 import org.slf4j.LoggerFactory
 import software.amazon.sagemaker.featurestore.sparksdk.exceptions.{StreamIngestionFailureException, ValidationError}
@@ -233,6 +235,81 @@ class FeatureStoreManager(assumeRoleArn: String = null) extends Serializable {
     result.put("RecordIdentifiers", response.recordIdentifiers())
     result.put("NextToken", response.nextToken())
     result
+  }
+
+  /** Perform a feature-level (partial) write to a record via the UpdateRecord API.
+   *
+   *  Only the supplied features are written; features that are not listed are preserved. UpdateRecord is supported only
+   *  for feature groups whose online store StorageType is Standard_V2 or InMemory, and the record must already exist
+   *  (use ingest_data / PutRecord to create it). Pass the event-time feature as one of the feature name/value pairs.
+   *
+   *  featureNames and featureValues are parallel lists (name[i] -> value[i]); they are passed as two lists rather than
+   *  a map so they marshal cleanly across the PySpark (py4j) bridge.
+   *
+   *  @param featureGroupArn
+   *    ARN or name of the Standard_V2 / InMemory feature group.
+   *  @param recordIdentifierValueAsString
+   *    the record identifier value, in string format.
+   *  @param featureNames
+   *    names of the features to update (max 100).
+   *  @param featureValues
+   *    string values, positionally matched to featureNames.
+   *  @param targetStores
+   *    optional stores to apply the update to; must include OnlineStore.
+   *  @param ttlDurationUnit
+   *    optional TtlDuration unit (e.g. "Days"); requires ttlDurationValue.
+   *  @param ttlDurationValue
+   *    optional TtlDuration value; requires ttlDurationUnit.
+   */
+  def updateRecord(
+      featureGroupArn: String,
+      recordIdentifierValueAsString: String,
+      featureNames: java.util.List[String],
+      featureValues: java.util.List[String],
+      targetStores: java.util.List[String] = null,
+      ttlDurationUnit: String = null,
+      ttlDurationValue: java.lang.Integer = null
+  ): Unit = {
+    require(
+      featureNames != null && featureValues != null && featureNames.size() == featureValues.size(),
+      "featureNames and featureValues must be non-null and of equal length."
+    )
+    require(!featureNames.isEmpty, "features must contain at least one feature to update.")
+    require(
+      (ttlDurationUnit == null) == (ttlDurationValue == null),
+      "ttlDurationUnit and ttlDurationValue must be provided together."
+    )
+    require(
+      targetStores == null || !targetStores.asScala.toSet
+        .equals(Set(TargetStore.OFFLINE_STORE.toString)),
+      "UpdateRecord cannot target the OfflineStore only; include the OnlineStore."
+    )
+
+    val region = new FeatureGroupArnResolver(featureGroupArn).resolveRegion()
+    ClientFactory.initialize(region = region, roleArn = assumeRoleArn)
+
+    val features = featureNames.asScala
+      .zip(featureValues.asScala)
+      .map { case (name, value) => FeatureValue.builder().featureName(name).valueAsString(value).build() }
+      .asJava
+
+    val requestBuilder = UpdateRecordRequest
+      .builder()
+      .featureGroupName(featureGroupArn)
+      .recordIdentifierValueAsString(recordIdentifierValueAsString)
+      .features(features)
+
+    if (targetStores != null) {
+      requestBuilder.targetStores(targetStores.asScala.map(TargetStore.fromValue).asJava)
+    }
+    if (ttlDurationUnit != null) {
+      requestBuilder.ttlDuration(
+        TtlDuration.builder().unit(ttlDurationUnit).value(ttlDurationValue).build()
+      )
+    }
+
+    val client = ClientFactory.sageMakerFeatureStoreRuntimeClientBuilder.build()
+    client.updateRecord(requestBuilder.build())
   }
 
   private def streamIngestIntoOnlineStore(

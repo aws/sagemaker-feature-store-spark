@@ -212,3 +212,45 @@ def test_list_records_all_params():
         java_method_invocation.assert_called_with(
             "listRecords", "test-arn", 5, "abc", True
         )
+
+
+def test_update_record_basic():
+    """update_record marshals features as parallel name/value lists to Java."""
+    feature_store_manager = FeatureStoreManager()
+    with patch('pyspark.ml.wrapper.JavaWrapper._call_java') as java_method_invocation:
+        feature_store_manager.update_record(
+            "test-arn", "r-1",
+            features={"city": "seattle", "event_time": "1700000000"},
+        )
+        java_method_invocation.assert_called_with(
+            "updateRecord", "test-arn", "r-1",
+            ["city", "event_time"], ["seattle", "1700000000"],
+            None, None, None,
+        )
+
+
+def test_update_record_stringifies_values():
+    """Non-string feature values are coerced to strings."""
+    feature_store_manager = FeatureStoreManager()
+    with patch('pyspark.ml.wrapper.JavaWrapper._call_java') as java_method_invocation:
+        feature_store_manager.update_record("test-arn", "r-1", features={"count": 11})
+        java_method_invocation.assert_called_with(
+            "updateRecord", "test-arn", "r-1", ["count"], ["11"], None, None, None,
+        )
+
+
+def test_update_record_with_target_stores_and_ttl():
+    """update_record forwards target_stores and TtlDuration unit/value."""
+    feature_store_manager = FeatureStoreManager()
+    with patch('pyspark.ml.wrapper.JavaWrapper._call_java') as java_method_invocation:
+        feature_store_manager.update_record(
+            "test-arn", "r-1",
+            features={"city": "tacoma", "event_time": "1700000060"},
+            target_stores=["OnlineStore"],
+            ttl_duration_unit="Days", ttl_duration_value=7,
+        )
+        java_method_invocation.assert_called_with(
+            "updateRecord", "test-arn", "r-1",
+            ["city", "event_time"], ["tacoma", "1700000060"],
+            ["OnlineStore"], "Days", 7,
+        )
